@@ -1,16 +1,28 @@
 /*
-    CompManager_Mesmo.jsx
-    MESMO TOOLS - Unified ScriptUI panel for Adobe After Effects.
+    MesmoTools.jsx
+    MESMO TOOLS - painel ScriptUI único para Adobe After Effects.
 
-    Tabs:
-    - Comps: batch resize, FPS, duration and 3D renderer
-    - Duplica: deep duplicate selected comps
-    - Explode: split selected text layers
-    - 3D: enable/disable 3D on selected comps and nested precomps
-    - Expressions: persistent named expression favorites
+    Abas:
+    - Curvas: biblioteca de curvas de velocidade (salvar, organizar, aplicar)
+    - Comps: resolução, FPS, duração e renderer 3D em lote
+    - Duplicar: duplica comps com precomps independentes
+    - Explode: divide camadas de texto
+    - 3D: liga/desliga 3D nas comps selecionadas e precomps
+    - Expressões: biblioteca de expressões favoritas
 
-    Expression favorites are stored locally in:
-    Folder.userData/MesmoTools/expression_favorites.txt
+    Arquivos salvos em Folder.userData/MesmoTools/:
+    - speed_curves.txt          (curvas)
+    - expression_favorites.txt  (expressões)
+
+    v2.0
+    - Tudo num arquivo só: MesmoTools.jsx (antigo CompManager_Mesmo.jsx).
+    - Visual novo: cabeçalho, navegação e botões desenhados, seções no
+      lugar das caixas, aba aberta por último é lembrada.
+    - Nova aba Curvas: 22 curvas prontas, categorias, favoritas, busca,
+      editor com alças arrastáveis, capturar curva das keyframes,
+      importar/exportar biblioteca.
+    - Explode: recusa texto vertical/justificado (como o avulso fazia) e
+      expõe explodeMesmo(options) para outros scripts.
 
     v1.1
     - Comps: timecode em 23,976 / 29,97 / 59,94 não perde mais frames
@@ -27,7 +39,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "1.1";
+    var SCRIPT_VERSION = "2.0";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -66,8 +78,409 @@
     function addStatus(parent, text) {
         var status = parent.add("statictext", undefined, text || "");
         status.alignment = ["fill", "top"];
+        uiColorText(status, THEME.textDim);
         return status;
     }
+
+    // ================================================================
+    // UI KIT — visual do Mesmo Tools
+    // Tudo é desenhado com onDraw do ScriptUI: botões, navegação, seções.
+    // Para mudar a cara do painel, comece pelas cores em THEME.
+    // ================================================================
+
+    var THEME = {
+        accent:       [1.00, 0.42, 0.24, 1],
+        accentHover:  [1.00, 0.54, 0.38, 1],
+        accentDown:   [0.84, 0.33, 0.17, 1],
+        accentSoft:   [1.00, 0.42, 0.24, 0.35],
+        text:         [0.90, 0.90, 0.90, 1],
+        textDim:      [0.58, 0.58, 0.58, 1],
+        textOnAccent: [0.09, 0.09, 0.09, 1],
+        surface:      [0.21, 0.21, 0.21, 1],
+        surfaceHover: [0.26, 0.26, 0.26, 1],
+        surfaceDown:  [0.16, 0.16, 0.16, 1],
+        well:         [0.13, 0.13, 0.13, 1],
+        line:         [0.31, 0.31, 0.31, 1],
+        grid:         [0.20, 0.20, 0.20, 1]
+    };
+
+    var FONT_CACHE = {};
+
+    function uiFont(style, size) {
+        var key = style + "_" + size;
+
+        if (FONT_CACHE[key] === undefined) {
+            try {
+                FONT_CACHE[key] = ScriptUI.newFont(
+                    "dialog",
+                    ScriptUI.FontStyle[style] || ScriptUI.FontStyle.REGULAR,
+                    size
+                );
+            } catch (e) {
+                FONT_CACHE[key] = null;
+            }
+        }
+
+        return FONT_CACHE[key];
+    }
+
+    function uiBrush(g, c) {
+        return g.newBrush(g.BrushType.SOLID_COLOR, c);
+    }
+
+    function uiPen(g, c, w) {
+        return g.newPen(g.PenType.SOLID_COLOR, c, w || 1);
+    }
+
+    function uiRoundRect(g, x, y, w, h, r) {
+        r = Math.max(0, Math.min(r, w / 2, h / 2));
+        g.newPath();
+
+        if (r < 1) {
+            g.rectPath(x, y, w, h);
+            return;
+        }
+
+        var corners = [
+            [x + w - r, y + r, -90],
+            [x + w - r, y + h - r, 0],
+            [x + r, y + h - r, 90],
+            [x + r, y + r, 180]
+        ];
+        var steps = 4;
+        var first = true;
+
+        for (var c = 0; c < corners.length; c++) {
+            for (var i = 0; i <= steps; i++) {
+                var a = (corners[c][2] + 90 * i / steps) * Math.PI / 180;
+                var px = corners[c][0] + r * Math.cos(a);
+                var py = corners[c][1] + r * Math.sin(a);
+
+                if (first) {
+                    g.moveTo(px, py);
+                    first = false;
+                } else {
+                    g.lineTo(px, py);
+                }
+            }
+        }
+
+        g.closePath();
+    }
+
+    function uiFit(g, s, font, maxW) {
+        s = String(s);
+        if (maxW <= 0) return "";
+        if (g.measureString(s, font)[0] <= maxW) return s;
+
+        while (s.length > 1 && g.measureString(s + "…", font)[0] > maxW) {
+            s = s.substring(0, s.length - 1);
+        }
+
+        return s + "…";
+    }
+
+    function uiText(g, s, font, color, x, y, w, h, align) {
+        var sz = g.measureString(s, font);
+        var tx = x + (w - sz[0]) / 2;
+
+        if (align === "left") tx = x;
+        else if (align === "right") tx = x + w - sz[0];
+
+        g.drawString(s, uiPen(g, color), tx, y + (h - sz[1]) / 2, font);
+    }
+
+    // Força o ScriptUI a chamar onDraw de novo.
+    function uiRedraw(el) {
+        try {
+            el.hide();
+            el.show();
+        } catch (e) {}
+    }
+
+    function uiColorText(st, color) {
+        try {
+            st.graphics.foregroundColor = st.graphics.newPen(
+                st.graphics.PenType.SOLID_COLOR,
+                color,
+                1
+            );
+        } catch (e) {}
+        return st;
+    }
+
+    function uiLabel(parent, text) {
+        return uiColorText(parent.add("statictext", undefined, text), THEME.textDim);
+    }
+
+    /*
+        Botão desenhado.
+        opts.primary: botão de ação principal (laranja)
+        opts.width / opts.height / opts.tip
+    */
+    function uiButton(parent, label, opts) {
+        opts = opts || {};
+
+        var b = parent.add("button", undefined, label);
+        b.mesmoPrimary = !!opts.primary;
+        b.preferredSize.height = opts.height || (opts.primary ? 32 : 24);
+
+        if (opts.width) b.preferredSize.width = opts.width;
+        if (opts.tip) b.helpTip = opts.tip;
+
+        b.onDraw = function (state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var bg;
+            var fg;
+
+            if (!this.enabled) {
+                bg = THEME.surfaceDown;
+                fg = THEME.textDim;
+            } else if (this.mesmoPrimary) {
+                bg = state.leftButtonPressed
+                    ? THEME.accentDown
+                    : (state.mouseOver ? THEME.accentHover : THEME.accent);
+                fg = THEME.textOnAccent;
+            } else {
+                bg = state.leftButtonPressed
+                    ? THEME.surfaceDown
+                    : (state.mouseOver ? THEME.surfaceHover : THEME.surface);
+                fg = THEME.text;
+            }
+
+            uiRoundRect(g, 0, 0, w, h, 4);
+            g.fillPath(uiBrush(g, bg));
+
+            if (!this.mesmoPrimary) {
+                uiRoundRect(g, 0.5, 0.5, w - 1, h - 1, 4);
+                g.strokePath(uiPen(g, state.mouseOver ? THEME.textDim : THEME.line, 1));
+            }
+
+            var font = uiFont(this.mesmoPrimary ? "BOLD" : "REGULAR", this.mesmoPrimary ? 12 : 11);
+            uiText(g, uiFit(g, this.text, font, w - 10), font, fg, 0, 0, w, h);
+        };
+
+        return b;
+    }
+
+    /*
+        Seção com título em caixa alta, marcador laranja e linha fina.
+        Devolve o grupo de conteúdo (use como se fosse um panel).
+    */
+    function uiSection(parent, title) {
+        var wrap = parent.add("group");
+        wrap.orientation = "column";
+        wrap.alignment = ["fill", "top"];
+        wrap.alignChildren = ["fill", "top"];
+        wrap.spacing = 6;
+        wrap.margins = [0, 4, 0, 0];
+
+        var head = wrap.add("group");
+        head.alignment = ["fill", "top"];
+        head.preferredSize = [100, 16];
+        head.mesmoTitle = String(title).toUpperCase();
+
+        head.onDraw = function () {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var font = uiFont("BOLD", 10);
+            var sz = g.measureString(this.mesmoTitle, font);
+
+            g.newPath();
+            g.rectPath(0, Math.round((h - 9) / 2), 3, 9);
+            g.fillPath(uiBrush(g, THEME.accent));
+
+            g.drawString(this.mesmoTitle, uiPen(g, THEME.textDim), 9, (h - sz[1]) / 2, font);
+
+            var lx = 9 + sz[0] + 8;
+            if (lx < w) {
+                var ly = Math.round(h / 2) + 0.5;
+                g.newPath();
+                g.moveTo(lx, ly);
+                g.lineTo(w, ly);
+                g.strokePath(uiPen(g, THEME.line, 1));
+            }
+        };
+
+        var body = wrap.add("group");
+        body.orientation = "column";
+        body.alignment = ["fill", "top"];
+        body.alignChildren = ["fill", "top"];
+        body.spacing = 6;
+        body.margins = [2, 0, 0, 0];
+
+        return body;
+    }
+
+    function bezierPoint(c, t) {
+        var mt = 1 - t;
+        var a = 3 * mt * mt * t;
+        var b = 3 * mt * t * t;
+        var d = t * t * t;
+
+        return [a * c.x1 + b * c.x2 + d, a * c.y1 + b * c.y2 + d];
+    }
+
+    function curveYRange(c) {
+        var lo = 0;
+        var hi = 1;
+
+        for (var i = 0; i <= 24; i++) {
+            var p = bezierPoint(c, i / 24);
+            if (p[1] < lo) lo = p[1];
+            if (p[1] > hi) hi = p[1];
+        }
+
+        return [lo, hi];
+    }
+
+    function uiStrokeCurve(g, c, x, y, w, h, range, color, width) {
+        var lo = range[0];
+        var span = (range[1] - range[0]) || 1;
+
+        g.newPath();
+
+        for (var i = 0; i <= 40; i++) {
+            var p = bezierPoint(c, i / 40);
+            var px = x + p[0] * w;
+            var py = y + h - (p[1] - lo) / span * h;
+
+            if (i === 0) g.moveTo(px, py);
+            else g.lineTo(px, py);
+        }
+
+        g.strokePath(uiPen(g, color, width));
+    }
+
+    function uiHeader(parent) {
+        var head = parent.add("group");
+        head.alignment = ["fill", "top"];
+        head.preferredSize = [200, 30];
+
+        var logoCurve = {x1: 0.7, y1: 0, x2: 0.3, y2: 1};
+
+        head.onDraw = function () {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var fBold = uiFont("BOLD", 14);
+            var fReg = uiFont("REGULAR", 14);
+            var fSmall = uiFont("REGULAR", 10);
+            var ly = Math.round((h - 20) / 2);
+
+            uiRoundRect(g, 0, ly, 20, 20, 5);
+            g.fillPath(uiBrush(g, THEME.accent));
+            uiStrokeCurve(g, logoCurve, 4, ly + 4, 12, 12, [0, 1], THEME.textOnAccent, 2);
+
+            var s1 = "MESMO";
+            var sz1 = g.measureString(s1, fBold);
+            g.drawString(s1, uiPen(g, THEME.text), 28, (h - sz1[1]) / 2, fBold);
+            g.drawString("TOOLS", uiPen(g, THEME.accent), 28 + sz1[0] + 4, (h - sz1[1]) / 2, fReg);
+
+            var v = "v" + SCRIPT_VERSION;
+            var sv = g.measureString(v, fSmall);
+            g.drawString(v, uiPen(g, THEME.textDim), w - sv[0] - 2, (h - sv[1]) / 2, fSmall);
+        };
+
+        return head;
+    }
+
+    /*
+        Navegação principal. items: [{label, short, tip}]
+        Quando o painel fica estreito, cada aba mostra o rótulo curto.
+    */
+    function uiNav(parent, items, onSelect) {
+        var row = parent.add("group");
+        row.orientation = "row";
+        row.alignment = ["fill", "top"];
+        row.alignChildren = ["fill", "fill"];
+        row.spacing = 2;
+        row.margins = 0;
+
+        var nav = {buttons: [], index: 0};
+
+        for (var i = 0; i < items.length; i++) {
+            var b = row.add("button", undefined, items[i].label);
+            b.mesmoShort = items[i].short || items[i].label;
+            b.mesmoIndex = i;
+            b.preferredSize = [30, 28];
+            b.helpTip = items[i].tip || items[i].label;
+
+            b.onDraw = function (state) {
+                var g = this.graphics;
+                var w = this.size[0];
+                var h = this.size[1];
+                var active = nav.index === this.mesmoIndex;
+
+                if (active) {
+                    uiRoundRect(g, 0, 0, w, h - 3, 3);
+                    g.fillPath(uiBrush(g, THEME.surface));
+                    g.newPath();
+                    g.rectPath(0, h - 3, w, 3);
+                    g.fillPath(uiBrush(g, THEME.accent));
+                } else {
+                    if (state.mouseOver) {
+                        uiRoundRect(g, 0, 0, w, h - 3, 3);
+                        g.fillPath(uiBrush(g, THEME.surfaceDown));
+                    }
+                    g.newPath();
+                    g.rectPath(0, h - 1, w, 1);
+                    g.fillPath(uiBrush(g, THEME.line));
+                }
+
+                var font = uiFont(active ? "BOLD" : "REGULAR", 11);
+                var s = this.text;
+                if (g.measureString(s, font)[0] > w - 8) s = this.mesmoShort;
+
+                uiText(
+                    g,
+                    uiFit(g, s, font, w - 4),
+                    font,
+                    (active || state.mouseOver) ? THEME.text : THEME.textDim,
+                    0, 0, w, h - 3
+                );
+            };
+
+            b.onClick = function () {
+                nav.select(this.mesmoIndex);
+            };
+
+            nav.buttons.push(b);
+        }
+
+        nav.select = function (idx) {
+            nav.index = idx;
+            uiRedraw(row);
+            if (onSelect) onSelect(idx);
+        };
+
+        return nav;
+    }
+
+    var SETTINGS_SECTION = "MesmoTools";
+
+    function loadSetting(key, fallback) {
+        try {
+            if (app.settings.haveSetting(SETTINGS_SECTION, key)) {
+                return app.settings.getSetting(SETTINGS_SECTION, key);
+            }
+        } catch (e) {}
+        return fallback;
+    }
+
+    function saveSetting(key, value) {
+        try {
+            app.settings.saveSetting(SETTINGS_SECTION, key, String(value));
+        } catch (e) {}
+    }
+
+    var WRITE_HELP =
+        "\n\nConfira em Preferências > Scripting & Expressions se a opção " +
+        "\"Allow Scripts to Write Files and Access Network\" está ativada.";
+
 
     /*
         Timecode non-drop-frame, igual ao After Effects:
@@ -207,7 +620,7 @@
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
         tab.spacing = 8;
-        tab.margins = 10;
+        tab.margins = [0, 6, 0, 0];
 
         var header = tab.add("group");
         header.orientation = "row";
@@ -216,12 +629,11 @@
         var selectionText = header.add("statictext", undefined, "Selecione comps no Project.");
         selectionText.alignment = ["fill", "center"];
 
-        var btnLoad = header.add("button", undefined, "Ler 1ª Comp");
+        var btnLoad = uiButton(header, "Ler 1ª Comp", {tip: "Carrega os valores da primeira comp selecionada"});
 
-        var resizePanel = tab.add("panel", undefined, "Resize Comp");
+        var resizePanel = uiSection(tab, "Resolução");
         resizePanel.orientation = "column";
         resizePanel.alignChildren = ["fill", "top"];
-        resizePanel.margins = 10;
 
         var cbResize = resizePanel.add("checkbox", undefined, "Aplicar Resize");
 
@@ -229,17 +641,17 @@
         sizeRow.orientation = "row";
         sizeRow.alignChildren = ["left", "center"];
 
-        sizeRow.add("statictext", undefined, "W:");
+        uiLabel(sizeRow, "W:");
         var txtW = sizeRow.add("edittext", undefined, "1920");
         txtW.characters = 6;
 
-        sizeRow.add("statictext", undefined, "H:");
+        uiLabel(sizeRow, "H:");
         var txtH = sizeRow.add("edittext", undefined, "1080");
         txtH.characters = 6;
 
-        sizeRow.add("statictext", undefined, "px");
+        uiLabel(sizeRow, "px");
 
-        var cbLockRatio = resizePanel.add("checkbox", undefined, "Lock aspect ratio");
+        var cbLockRatio = resizePanel.add("checkbox", undefined, "Travar proporção");
         cbLockRatio.value = true;
 
         function updateLockedRatioFromFields() {
@@ -274,10 +686,9 @@
 
         updateLockedRatioFromFields();
 
-        var fpsPanel = tab.add("panel", undefined, "Frame Rate");
+        var fpsPanel = uiSection(tab, "Frame Rate");
         fpsPanel.orientation = "column";
         fpsPanel.alignChildren = ["fill", "top"];
-        fpsPanel.margins = 10;
 
         var cbFPS = fpsPanel.add("checkbox", undefined, "Aplicar Frame Rate");
 
@@ -285,7 +696,7 @@
         fpsRow.orientation = "row";
         fpsRow.alignChildren = ["left", "center"];
 
-        fpsRow.add("statictext", undefined, "FPS:");
+        uiLabel(fpsRow, "FPS:");
 
         var ddFPS = fpsRow.add(
             "dropdownlist",
@@ -335,10 +746,9 @@
             return fps;
         }
 
-        var durationPanel = tab.add("panel", undefined, "Duração");
+        var durationPanel = uiSection(tab, "Duração");
         durationPanel.orientation = "column";
         durationPanel.alignChildren = ["fill", "top"];
-        durationPanel.margins = 10;
 
         var cbDuration = durationPanel.add("checkbox", undefined, "Aplicar Duração");
 
@@ -346,22 +756,21 @@
         durationRow.orientation = "row";
         durationRow.alignChildren = ["left", "center"];
 
-        durationRow.add("statictext", undefined, "Tempo:");
+        uiLabel(durationRow, "Tempo:");
         var txtDuration = durationRow.add("edittext", undefined, "0:00:10:00");
         txtDuration.characters = 12;
-        durationRow.add("statictext", undefined, "H:MM:SS:FF | 10s | 250f");
+        uiLabel(durationRow, "H:MM:SS:FF | 10s | 250f");
 
-        var rendererPanel = tab.add("panel", undefined, "3D Renderer");
+        var rendererPanel = uiSection(tab, "Renderer 3D");
         rendererPanel.orientation = "column";
         rendererPanel.alignChildren = ["fill", "top"];
-        rendererPanel.margins = 10;
 
         var cbRenderer = rendererPanel.add("checkbox", undefined, "Aplicar 3D Renderer");
 
         var rendererRow = rendererPanel.add("group");
         rendererRow.orientation = "row";
         rendererRow.alignChildren = ["left", "center"];
-        rendererRow.add("statictext", undefined, "Renderer:");
+        uiLabel(rendererRow, "Renderer:");
 
         var ddRenderer = rendererRow.add(
             "dropdownlist",
@@ -370,8 +779,7 @@
         );
         ddRenderer.selection = 0;
 
-        var btnApply = tab.add("button", undefined, "APLICAR NAS COMPS SELECIONADAS");
-        btnApply.preferredSize.height = 34;
+        var btnApply = uiButton(tab, "APLICAR NAS COMPS SELECIONADAS", {primary: true});
 
         var status = addStatus(tab, "Nenhuma alteração aplicada ainda.");
 
@@ -588,45 +996,43 @@
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
         tab.spacing = 8;
-        tab.margins = 10;
+        tab.margins = [0, 6, 0, 0];
 
-        var pnlNaming = tab.add("panel", undefined, "New Item Naming");
+        var pnlNaming = uiSection(tab, "Nome das cópias");
         pnlNaming.orientation = "column";
         pnlNaming.alignChildren = ["fill", "top"];
-        pnlNaming.margins = 10;
 
         var grpSfx = pnlNaming.add("group");
         var cbSfx = grpSfx.add("checkbox", undefined, "");
         cbSfx.value = true;
 
-        var ddType = grpSfx.add("dropdownlist", undefined, ["Suffix", "Prefix"]);
+        var ddType = grpSfx.add("dropdownlist", undefined, ["Sufixo", "Prefixo"]);
         ddType.selection = 0;
 
         var txtSfx = grpSfx.add("edittext", undefined, "_Copy");
         txtSfx.characters = 16;
 
         var grpSrch = pnlNaming.add("group");
-        var cbSrch = grpSrch.add("checkbox", undefined, "Search");
+        var cbSrch = grpSrch.add("checkbox", undefined, "Buscar");
 
         var txtSrch = grpSrch.add("edittext", undefined, "");
         txtSrch.characters = 10;
 
-        grpSrch.add("statictext", undefined, "Replace");
+        uiLabel(grpSrch, "trocar por");
 
         var txtRpl = grpSrch.add("edittext", undefined, "");
         txtRpl.characters = 10;
 
-        var pnlOpts = tab.add("panel", undefined, "Options");
+        var pnlOpts = uiSection(tab, "Opções");
         pnlOpts.orientation = "column";
         pnlOpts.alignChildren = ["fill", "top"];
-        pnlOpts.margins = 10;
 
-        var cbFolder = pnlOpts.add("checkbox", undefined, "Group Items Into Folder");
+        var cbFolder = pnlOpts.add("checkbox", undefined, "Agrupar numa pasta");
 
         var txtFolderName = pnlOpts.add("edittext", undefined, "Duplicated Comps");
         txtFolderName.enabled = false;
 
-        var cbExp = pnlOpts.add("checkbox", undefined, "Update Expressions");
+        var cbExp = pnlOpts.add("checkbox", undefined, "Atualizar expressões");
         cbExp.value = true;
 
         cbFolder.onClick = function () {
@@ -637,12 +1043,12 @@
         bottomGrp.orientation = "row";
         bottomGrp.alignment = ["fill", "top"];
 
-        bottomGrp.add("statictext", undefined, "Copies:");
+        uiLabel(bottomGrp, "Cópias:");
 
         var copyCount = bottomGrp.add("edittext", undefined, "1");
         copyCount.characters = 4;
 
-        var btnRun = bottomGrp.add("button", undefined, "DUPLICATE SELECTED");
+        var btnRun = uiButton(bottomGrp, "DUPLICAR SELECIONADAS", {primary: true});
         btnRun.alignment = ["fill", "center"];
 
         var status = addStatus(tab, "Selecione uma ou mais comps no Project.");
@@ -1339,6 +1745,33 @@
         }
     }
 
+    function isUnsupportedText(doc) {
+        try {
+            if (
+                typeof LineOrientation !== "undefined" &&
+                doc.lineOrientation !== LineOrientation.HORIZONTAL
+            ) {
+                return "texto vertical não é suportado.";
+            }
+        } catch (e1) {}
+
+        try {
+            var j = doc.justification;
+            var PJ = ParagraphJustification;
+            if (
+                j === PJ.FULL_JUSTIFY_LASTLINE_LEFT ||
+                j === PJ.FULL_JUSTIFY_LASTLINE_RIGHT ||
+                j === PJ.FULL_JUSTIFY_LASTLINE_CENTER ||
+                j === PJ.FULL_JUSTIFY_LASTLINE_FULL ||
+                j === PJ.MULTIPLE_JUSTIFICATIONS
+            ) {
+                return "texto justificado não é suportado.";
+            }
+        } catch (e2) {}
+
+        return null;
+    }
+
     function explodeSelectedText(opts) {
         var comp = app.project ? app.project.activeItem : null;
 
@@ -1372,6 +1805,13 @@
                 var layer = textLayers[i];
                 var doc = getTextDocAtTime(layer, comp.time);
                 var segments;
+                var unsupported = isUnsupportedText(doc);
+
+                if (unsupported) {
+                    skipped++;
+                    alert("'" + layer.name + "' foi ignorada: " + unsupported);
+                    continue;
+                }
 
                 try {
                     segments = buildExplodeSegments(
@@ -1471,27 +1911,26 @@
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
         tab.spacing = 8;
-        tab.margins = 10;
+        tab.margins = [0, 6, 0, 0];
 
-        var splitPanel = tab.add("panel", undefined, "Split");
+        var splitPanel = uiSection(tab, "Dividir");
         splitPanel.orientation = "column";
         splitPanel.alignChildren = ["fill", "top"];
-        splitPanel.margins = 10;
 
         var rowMode = splitPanel.add("group");
         rowMode.orientation = "row";
 
-        rowMode.add("statictext", undefined, "Dividir em:");
+        uiLabel(rowMode, "Dividir em:");
 
         var ddMode = rowMode.add(
             "dropdownlist",
             undefined,
             [
-                "Characters",
-                "Words",
-                "Lines",
-                "Custom word",
-                "Custom regular expression"
+                "Letras",
+                "Palavras",
+                "Linhas",
+                "Palavra específica",
+                "Expressão regular (regex)"
             ]
         );
         ddMode.selection = 0;
@@ -1506,10 +1945,9 @@
         txtCustom.characters = 24;
         txtCustom.alignment = ["fill", "center"];
 
-        var optionsPanel = tab.add("panel", undefined, "Opções");
+        var optionsPanel = uiSection(tab, "Opções");
         optionsPanel.orientation = "column";
         optionsPanel.alignChildren = ["left", "top"];
-        optionsPanel.margins = 10;
 
         var cbDelete = optionsPanel.add(
             "checkbox",
@@ -1525,17 +1963,16 @@
 
         var orderRow = optionsPanel.add("group");
         orderRow.orientation = "row";
-        orderRow.add("statictext", undefined, "Ordem das layers:");
+        uiLabel(orderRow, "Ordem das layers:");
 
         var ddOrder = orderRow.add(
             "dropdownlist",
             undefined,
-            ["Top to Bottom", "Bottom to Top"]
+            ["De cima para baixo", "De baixo para cima"]
         );
         ddOrder.selection = 0;
 
-        var btnApply = tab.add("button", undefined, "EXPLODIR TEXTO");
-        btnApply.preferredSize.height = 34;
+        var btnApply = uiButton(tab, "EXPLODIR TEXTO", {primary: true});
 
         var status = addStatus(tab, "Selecione uma ou mais camadas de texto.");
 
@@ -1609,7 +2046,7 @@
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
         tab.spacing = 8;
-        tab.margins = 10;
+        tab.margins = [0, 6, 0, 0];
 
         var info = tab.add(
             "statictext",
@@ -1618,10 +2055,9 @@
         );
         info.alignment = ["fill", "top"];
 
-        var optionsPanel = tab.add("panel", undefined, "Opções");
+        var optionsPanel = uiSection(tab, "Opções");
         optionsPanel.orientation = "column";
         optionsPanel.alignChildren = ["left", "top"];
-        optionsPanel.margins = 10;
 
         var recursiveCheckbox = optionsPanel.add(
             "checkbox",
@@ -1641,8 +2077,8 @@
         btns.orientation = "row";
         btns.alignChildren = ["fill", "center"];
 
-        var make3DButton = btns.add("button", undefined, "ATIVAR 3D");
-        var disable3DButton = btns.add("button", undefined, "DESATIVAR 3D");
+        var make3DButton = uiButton(btns, "ATIVAR 3D", {primary: true});
+        var disable3DButton = uiButton(btns, "DESATIVAR 3D", {height: 32});
 
         var status = addStatus(tab, "Selecione comps no Project.");
 
@@ -1818,7 +2254,7 @@
             try { f.close(); } catch (closeErr) {}
             alert(
                 "Não foi possível salvar os favoritos:\n" +
-                e.toString().replace("Error: ", "")
+                e.toString().replace("Error: ", "") + WRITE_HELP
             );
             return false;
         }
@@ -1887,7 +2323,7 @@
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
         tab.spacing = 8;
-        tab.margins = 10;
+        tab.margins = [0, 6, 0, 0];
 
         var favorites = loadExpressionFavorites();
 
@@ -1895,7 +2331,7 @@
         searchRow.orientation = "row";
         searchRow.alignChildren = ["left", "center"];
 
-        searchRow.add("statictext", undefined, "Buscar:");
+        uiLabel(searchRow, "Buscar:");
 
         var txtSearch = searchRow.add("edittext", undefined, "");
         txtSearch.alignment = ["fill", "center"];
@@ -1909,13 +2345,13 @@
         nameRow.orientation = "row";
         nameRow.alignChildren = ["left", "center"];
 
-        nameRow.add("statictext", undefined, "Nome:");
+        uiLabel(nameRow, "Nome:");
 
         var txtName = nameRow.add("edittext", undefined, "");
         txtName.alignment = ["fill", "center"];
         txtName.characters = 24;
 
-        tab.add("statictext", undefined, "Expressão:");
+        uiLabel(tab, "Expressão:");
 
         var txtCode = tab.add(
             "edittext",
@@ -1934,21 +2370,16 @@
         manageRow.orientation = "row";
         manageRow.alignChildren = ["fill", "center"];
 
-        var btnNew = manageRow.add("button", undefined, "Novo");
-        var btnSave = manageRow.add("button", undefined, "Salvar");
-        var btnDelete = manageRow.add("button", undefined, "Excluir");
-        var btnCapture = manageRow.add("button", undefined, "Capturar");
+        var btnNew = uiButton(manageRow, "Novo");
+        var btnSave = uiButton(manageRow, "Salvar");
+        var btnDelete = uiButton(manageRow, "Excluir");
+        var btnCapture = uiButton(manageRow, "Capturar");
 
         var applyRow = tab.add("group");
         applyRow.orientation = "row";
         applyRow.alignChildren = ["fill", "center"];
 
-        var btnApply = applyRow.add(
-            "button",
-            undefined,
-            "APLICAR NAS PROPRIEDADES SELECIONADAS"
-        );
-        btnApply.preferredSize.height = 34;
+        var btnApply = uiButton(applyRow, "APLICAR NAS PROPRIEDADES SELECIONADAS", {primary: true});
 
         var status = addStatus(
             tab,
@@ -2173,56 +2604,1119 @@
         refreshList(null);
     }
 
-    function buildUI(thisObj) {
-        var win = (thisObj instanceof Panel)
-            ? thisObj
-            : new Window(
-                "palette",
-                SCRIPT_NAME,
-                undefined,
-                {resizeable: true}
+    // ================================================================
+    // CURVAS — biblioteca de curvas de velocidade
+    // Cada curva é um cubic-bezier normalizado (x1, y1, x2, y2), igual ao
+    // CSS e ao cubic-bezier.com. Na hora de aplicar, ele é convertido para
+    // speed + influence das keyframes do After Effects.
+    // ================================================================
+
+    var CURVE_DEFAULTS = [
+        // nome, categoria, x1, y1, x2, y2, favorita
+        ["Linear", "Básicas", 0.333, 0.333, 0.667, 0.667, 0],
+        ["Easy Ease (AE)", "Básicas", 0.333, 0, 0.667, 1, 1],
+        ["Easy Ease In (AE)", "Básicas", 0.167, 0.167, 0.667, 1, 0],
+        ["Easy Ease Out (AE)", "Básicas", 0.333, 0, 0.833, 0.833, 0],
+        ["In Sine", "Sine", 0.12, 0, 0.39, 0, 0],
+        ["Out Sine", "Sine", 0.61, 1, 0.88, 1, 0],
+        ["InOut Sine", "Sine", 0.37, 0, 0.63, 1, 0],
+        ["In Cubic", "Cubic", 0.32, 0, 0.67, 0, 0],
+        ["Out Cubic", "Cubic", 0.33, 1, 0.68, 1, 0],
+        ["InOut Cubic", "Cubic", 0.65, 0, 0.35, 1, 1],
+        ["In Quint", "Quint", 0.64, 0, 0.78, 0, 0],
+        ["Out Quint", "Quint", 0.22, 1, 0.36, 1, 0],
+        ["InOut Quint", "Quint", 0.83, 0, 0.17, 1, 0],
+        ["In Expo", "Expo", 0.7, 0, 0.84, 0, 0],
+        ["Out Expo", "Expo", 0.16, 1, 0.3, 1, 1],
+        ["InOut Expo", "Expo", 0.87, 0, 0.13, 1, 0],
+        ["In Back", "Back", 0.36, 0, 0.66, -0.56, 0],
+        ["Out Back", "Back", 0.34, 1.56, 0.64, 1, 0],
+        ["InOut Back", "Back", 0.68, -0.6, 0.32, 1.6, 0],
+        ["Standard", "Material", 0.4, 0, 0.2, 1, 1],
+        ["Emphasized Out", "Material", 0.05, 0.7, 0.1, 1, 0],
+        ["Emphasized In", "Material", 0.3, 0, 0.8, 0.15, 0]
+    ];
+
+    function round3(v) {
+        return Math.round(v * 1000) / 1000;
+    }
+
+    function makeCurve(name, cat, x1, y1, x2, y2, fav) {
+        return {
+            name: String(name),
+            cat: String(cat || "Minhas"),
+            x1: round3(Math.max(0, Math.min(1, x1))),
+            y1: round3(y1),
+            x2: round3(Math.max(0, Math.min(1, x2))),
+            y2: round3(y2),
+            fav: !!fav
+        };
+    }
+
+    function defaultCurves() {
+        var out = [];
+        for (var i = 0; i < CURVE_DEFAULTS.length; i++) {
+            var d = CURVE_DEFAULTS[i];
+            out.push(makeCurve(d[0], d[1], d[2], d[3], d[4], d[5], d[6]));
+        }
+        return out;
+    }
+
+    function curveValuesText(c) {
+        return c.x1 + ", " + c.y1 + ", " + c.x2 + ", " + c.y2;
+    }
+
+    // Aceita "0.4, 0, 0.2, 1", "cubic-bezier(.4,0,.2,1)" ou "0,4; 0; 0,2; 1".
+    function parseCurveValues(s) {
+        s = String(s);
+        var nums = [];
+        var i;
+
+        if (s.indexOf(";") !== -1) {
+            var parts = s.replace(/[^\d.,;\-]/g, "").split(";");
+            for (i = 0; i < parts.length; i++) {
+                if (parts[i] !== "") nums.push(parseFloat(parts[i].replace(",", ".")));
+            }
+        } else {
+            var m = s.match(/-?\d*\.?\d+/g) || [];
+            for (i = 0; i < m.length; i++) nums.push(parseFloat(m[i]));
+        }
+
+        if (nums.length !== 4) return null;
+        for (i = 0; i < 4; i++) if (isNaN(nums[i])) return null;
+
+        return nums;
+    }
+
+    // ---------- leitura e gravação ----------
+
+    function getCurveStoreFile() {
+        var dir = new Folder(Folder.userData.fsName + "/MesmoTools");
+        if (!dir.exists) {
+            try { dir.create(); } catch (e) {}
+        }
+        return new File(dir.fsName + "/speed_curves.txt");
+    }
+
+    function readCurveFile(f) {
+        if (!f || !f.exists) return null;
+
+        var out = [];
+
+        try {
+            f.encoding = "UTF-8";
+            if (!f.open("r")) return null;
+
+            while (!f.eof) {
+                var line = f.readln();
+                if (line === "" || line.charAt(0) === "#") continue;
+
+                var fields = line.split("\t");
+                if (fields.length < 3) continue;
+
+                try {
+                    var v = parseCurveValues(fields[2]);
+                    if (!v) continue;
+
+                    out.push(makeCurve(
+                        decodeURIComponent(fields[0]),
+                        decodeURIComponent(fields[1]),
+                        v[0], v[1], v[2], v[3],
+                        fields[3] === "1"
+                    ));
+                } catch (lineErr) {}
+            }
+
+            f.close();
+        } catch (e) {
+            try { f.close(); } catch (closeErr) {}
+            return null;
+        }
+
+        return out;
+    }
+
+    function writeCurveFile(f, curves) {
+        try {
+            f.encoding = "UTF-8";
+            f.lineFeed = "Unix";
+
+            if (!f.open("w")) throw new Error("Não foi possível abrir o arquivo.");
+
+            f.writeln("# Mesmo Tools speed curves v1 | nome<TAB>categoria<TAB>x1,y1,x2,y2<TAB>favorita");
+
+            for (var i = 0; i < curves.length; i++) {
+                var c = curves[i];
+                f.writeln(
+                    encodeURIComponent(c.name) + "\t" +
+                    encodeURIComponent(c.cat) + "\t" +
+                    c.x1 + "," + c.y1 + "," + c.x2 + "," + c.y2 + "\t" +
+                    (c.fav ? "1" : "0")
+                );
+            }
+
+            f.close();
+            return true;
+        } catch (e) {
+            try { f.close(); } catch (closeErr) {}
+            alert(
+                "Não foi possível salvar as curvas:\n" +
+                e.toString().replace("Error: ", "") + WRITE_HELP
             );
+            return false;
+        }
+    }
 
-        win.orientation = "column";
-        win.alignChildren = ["fill", "fill"];
-        win.spacing = 8;
-        win.margins = 8;
+    function findCurveIndex(curves, name) {
+        for (var i = 0; i < curves.length; i++) {
+            if (curves[i].name === name) return i;
+        }
+        return -1;
+    }
 
-        var header = win.add("group");
-        header.orientation = "row";
-        header.alignChildren = ["fill", "center"];
+    // ---------- conversão bezier <-> keyframes do AE ----------
 
-        var title = header.add("statictext", undefined, "MESMO TOOLS");
-        title.alignment = ["fill", "center"];
+    function isCurveCompatibleProperty(p) {
+        try {
+            if (p.propertyType !== PropertyType.PROPERTY) return false;
+            if (!p.canVaryOverTime || p.numKeys < 2) return false;
 
-        header.add("statictext", undefined, "v" + SCRIPT_VERSION);
+            var vt = p.propertyValueType;
+            if (
+                vt === PropertyValueType.NO_VALUE ||
+                vt === PropertyValueType.CUSTOM_VALUE ||
+                vt === PropertyValueType.SHAPE ||
+                vt === PropertyValueType.TEXT_DOCUMENT ||
+                vt === PropertyValueType.MARKER ||
+                vt === PropertyValueType.LAYER_INDEX ||
+                vt === PropertyValueType.MASK_INDEX
+            ) {
+                return false;
+            }
 
-        var tabs = win.add("tabbedpanel");
-        tabs.alignment = ["fill", "fill"];
-        tabs.preferredSize = [470, 610];
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
 
-        var tabComps = tabs.add("tab", undefined, "Comps");
-        var tabDuplica = tabs.add("tab", undefined, "Duplica");
-        var tabExplode = tabs.add("tab", undefined, "Explode");
-        var tab3D = tabs.add("tab", undefined, "3D");
-        var tabExpressions = tabs.add("tab", undefined, "Expressions");
+    // Diferença de valor entre duas keys, no formato que o ease espera:
+    // 1 dimensão -> [delta]; espacial (ease único) -> [distância]; N dims -> [d1, d2...]
+    function keyDeltas(prop, k1, k2, easeLen) {
+        var v1 = prop.keyValue(k1);
+        var v2 = prop.keyValue(k2);
+        var i;
 
-        var compsTab = buildCompsTab(tabComps);
-        buildDuplicaTab(tabDuplica);
-        buildExplodeTab(tabExplode);
-        build3DTab(tab3D);
-        buildExpressionsTab(tabExpressions);
+        if (typeof v1 === "number") return [v2 - v1];
 
-        tabs.selection = tabComps;
+        if (v1 instanceof Array) {
+            if (easeLen === 1) {
+                var sum = 0;
+                for (i = 0; i < v1.length; i++) {
+                    sum += (v2[i] - v1[i]) * (v2[i] - v1[i]);
+                }
+                return [Math.sqrt(sum)];
+            }
 
-        // Atualiza o resumo da seleção sempre que voltar para a aba Comps.
-        tabs.onChange = function () {
-            if (tabs.selection === tabComps) {
-                try { compsTab.refresh(); } catch (e) {}
+            var out = [];
+            for (i = 0; i < easeLen; i++) out.push((v2[i] || 0) - (v1[i] || 0));
+            return out;
+        }
+
+        return null;
+    }
+
+    /*
+        Conversão (mesma ideia do Flow):
+        saída da 1ª key:   influence = x1 * 100,       speed = (y1 / x1) * velocidadeMédia
+        entrada da 2ª key: influence = (1 - x2) * 100, speed = ((1 - y2) / (1 - x2)) * velocidadeMédia
+        mode: "both" | "out" | "in"
+    */
+    function applyCurveToSegment(prop, k1, k2, c, mode) {
+        var dt = prop.keyTime(k2) - prop.keyTime(k1);
+        if (dt <= 0) return false;
+
+        var easeLen = prop.keyOutTemporalEase(k1).length;
+        var deltas = keyDeltas(prop, k1, k2, easeLen);
+        if (!deltas) throw new Error("tipo de propriedade não suportado.");
+
+        var x1 = Math.max(0.001, Math.min(1, c.x1));
+        var x2 = Math.max(0, Math.min(0.999, c.x2));
+        var outInf = Math.max(0.1, Math.min(100, x1 * 100));
+        var inInf = Math.max(0.1, Math.min(100, (1 - x2) * 100));
+        var outEase = [];
+        var inEase = [];
+
+        for (var d = 0; d < easeLen; d++) {
+            var avg = deltas[d] / dt;
+            outEase.push(new KeyframeEase((c.y1 / x1) * avg, outInf));
+            inEase.push(new KeyframeEase(((1 - c.y2) / (1 - x2)) * avg, inInf));
+        }
+
+        var BEZ = KeyframeInterpolationType.BEZIER;
+
+        if (mode !== "in") {
+            prop.setInterpolationTypeAtKey(k1, prop.keyInInterpolationType(k1), BEZ);
+            try { prop.setTemporalContinuousAtKey(k1, false); } catch (e1) {}
+            try { prop.setTemporalAutoBezierAtKey(k1, false); } catch (e2) {}
+            prop.setTemporalEaseAtKey(k1, prop.keyInTemporalEase(k1), outEase);
+        }
+
+        if (mode !== "out") {
+            prop.setInterpolationTypeAtKey(k2, BEZ, prop.keyOutInterpolationType(k2));
+            try { prop.setTemporalContinuousAtKey(k2, false); } catch (e3) {}
+            try { prop.setTemporalAutoBezierAtKey(k2, false); } catch (e4) {}
+            prop.setTemporalEaseAtKey(k2, inEase, prop.keyOutTemporalEase(k2));
+        }
+
+        return true;
+    }
+
+    function captureCurveFromSegment(prop, k1, k2) {
+        if (
+            prop.keyOutInterpolationType(k1) === KeyframeInterpolationType.HOLD ||
+            prop.keyInInterpolationType(k2) === KeyframeInterpolationType.HOLD
+        ) {
+            throw new Error("Keyframes em Hold não têm curva para capturar.");
+        }
+
+        var dt = prop.keyTime(k2) - prop.keyTime(k1);
+        var outEase = prop.keyOutTemporalEase(k1);
+        var inEase = prop.keyInTemporalEase(k2);
+        var deltas = keyDeltas(prop, k1, k2, outEase.length);
+
+        if (!deltas || dt <= 0) throw new Error("Não foi possível ler essas keyframes.");
+
+        var d = 0;
+        for (var i = 1; i < deltas.length; i++) {
+            if (Math.abs(deltas[i]) > Math.abs(deltas[d])) d = i;
+        }
+
+        if (Math.abs(deltas[d]) < 1e-9) {
+            throw new Error("As duas keyframes têm o mesmo valor, então não há curva para ler.");
+        }
+
+        var avg = deltas[d] / dt;
+        var x1 = outEase[d].influence / 100;
+        var x2 = 1 - inEase[d].influence / 100;
+        var y1 = (outEase[d].speed / avg) * x1;
+        var y2 = 1 - (inEase[d].speed / avg) * (1 - x2);
+
+        return {x1: round3(x1), y1: round3(y1), x2: round3(x2), y2: round3(y2)};
+    }
+
+    // Segmentos [prop, k1, k2] a partir das keyframes selecionadas na comp ativa.
+    function collectCurveSegments(comp) {
+        var props = [];
+        var segments = [];
+        var skipped = 0;
+        var i;
+
+        function addProp(p) {
+            if (!p) return;
+            for (var k = 0; k < props.length; k++) if (props[k] === p) return;
+            props.push(p);
+        }
+
+        try {
+            var cp = comp.selectedProperties;
+            for (i = 0; i < cp.length; i++) addProp(cp[i]);
+        } catch (e1) {}
+
+        try {
+            var layers = comp.selectedLayers;
+            for (i = 0; i < layers.length; i++) {
+                var lp = layers[i].selectedProperties;
+                for (var j = 0; j < lp.length; j++) addProp(lp[j]);
+            }
+        } catch (e2) {}
+
+        for (i = 0; i < props.length; i++) {
+            var p = props[i];
+            var keys;
+
+            try {
+                if (p.propertyType !== PropertyType.PROPERTY) continue;
+                keys = p.selectedKeys;
+                if (!keys || keys.length === 0) continue;
+            } catch (e3) {
+                continue;
+            }
+
+            if (!isCurveCompatibleProperty(p)) {
+                skipped++;
+                continue;
+            }
+
+            keys = keys.slice(0).sort(function (a, b) { return a - b; });
+
+            if (keys.length === 1) {
+                if (keys[0] < p.numKeys) segments.push([p, keys[0], keys[0] + 1]);
+                else segments.push([p, keys[0] - 1, keys[0]]);
+                continue;
+            }
+
+            for (var s = 0; s < keys.length - 1; s++) {
+                if (keys[s + 1] === keys[s] + 1) segments.push([p, keys[s], keys[s + 1]]);
+            }
+        }
+
+        return {segments: segments, skipped: skipped};
+    }
+
+    // ---------- aba ----------
+
+    function buildCurvesTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 8;
+        tab.margins = [0, 6, 0, 0];
+
+        var PER_PAGE = 12;
+        var COLS = 4;
+        var ALL = "Todas";
+        var FAVS = "★ Favoritas";
+        var ED_RANGE = [-0.6, 1.6];
+        var ED_PAD = 16;
+
+        var curves = readCurveFile(getCurveStoreFile());
+        if (!curves) {
+            curves = defaultCurves();
+            try { writeCurveFile(getCurveStoreFile(), curves); } catch (eSeed) {}
+        }
+
+        var lib = {
+            cat: loadSetting("curvesCategory", ALL),
+            page: 0,
+            selected: null,
+            edit: makeCurve("", "Minhas", 0.333, 0, 0.667, 1, false),
+            busy: false
+        };
+
+        // ----- Biblioteca -----
+        var libSec = uiSection(tab, "Biblioteca de curvas");
+
+        var filterRow = libSec.add("group");
+        filterRow.orientation = "row";
+        filterRow.alignChildren = ["fill", "center"];
+
+        var ddCat = filterRow.add("dropdownlist", undefined, []);
+        ddCat.preferredSize.width = 130;
+
+        var txtFind = filterRow.add("edittext", undefined, "");
+        txtFind.alignment = ["fill", "center"];
+        txtFind.helpTip = "Buscar curva pelo nome";
+
+        var grid = libSec.add("group");
+        grid.orientation = "column";
+        grid.alignChildren = ["fill", "top"];
+        grid.spacing = 4;
+
+        var slots = [];
+
+        function drawThumb(state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var c = this.mesmoCurve;
+
+            uiRoundRect(g, 0, 0, w, h, 4);
+
+            if (!c) {
+                g.fillPath(uiBrush(g, THEME.well));
+                return;
+            }
+
+            var sel = lib.selected === c.name;
+            g.fillPath(uiBrush(g, state.mouseOver ? THEME.surfaceHover : THEME.surface));
+
+            if (sel) {
+                uiRoundRect(g, 1, 1, w - 2, h - 2, 4);
+                g.strokePath(uiPen(g, THEME.accent, 2));
+            }
+
+            var pad = 9;
+            var gh = h - pad - 20;
+            var range = curveYRange(c);
+            var lo = range[0];
+            var span = range[1] - range[0];
+            var y0 = pad + gh - (0 - lo) / span * gh;
+            var y1 = pad + gh - (1 - lo) / span * gh;
+
+            g.newPath();
+            g.moveTo(pad, y0 + 0.5);
+            g.lineTo(w - pad, y0 + 0.5);
+            g.moveTo(pad, y1 + 0.5);
+            g.lineTo(w - pad, y1 + 0.5);
+            g.strokePath(uiPen(g, THEME.line, 1));
+
+            uiStrokeCurve(g, c, pad, pad, w - pad * 2, gh, range, sel ? THEME.accent : THEME.text, 2);
+
+            var font = uiFont("REGULAR", 9);
+            var label = (c.fav ? "★ " : "") + c.name;
+            uiText(g, uiFit(g, label, font, w - 6), font, sel ? THEME.text : THEME.textDim, 3, h - 18, w - 6, 16);
+        }
+
+        for (var r = 0; r < PER_PAGE / COLS; r++) {
+            var row = grid.add("group");
+            row.orientation = "row";
+            row.alignChildren = ["fill", "top"];
+            row.spacing = 4;
+
+            for (var cIdx = 0; cIdx < COLS; cIdx++) {
+                var slot = row.add("button", undefined, "");
+                slot.preferredSize = [56, 64];
+                slot.mesmoCurve = null;
+                slot.onDraw = drawThumb;
+                slot.onClick = onThumbClick;
+                slots.push(slot);
+            }
+        }
+
+        var pager = libSec.add("group");
+        pager.orientation = "row";
+        pager.alignChildren = ["fill", "center"];
+
+        var btnPrev = uiButton(pager, "‹", {width: 30, tip: "Página anterior"});
+        var pageText = uiLabel(pager, "");
+        pageText.alignment = ["fill", "center"];
+        pageText.justify = "center";
+        var btnNext = uiButton(pager, "›", {width: 30, tip: "Próxima página"});
+
+        // ----- Editor -----
+        var edSec = uiSection(tab, "Editor");
+
+        var editor = edSec.add("group");
+        editor.alignment = ["fill", "top"];
+        editor.preferredSize = [200, 180];
+        editor.helpTip = "Arraste as alças. Shift arredonda os valores.";
+
+        function edBox() {
+            var w = editor.size[0];
+            var h = editor.size[1];
+            return {x: ED_PAD, y: ED_PAD, w: w - ED_PAD * 2, h: h - ED_PAD * 2};
+        }
+
+        function edX(v, b) { return b.x + v * b.w; }
+        function edY(v, b) { return b.y + b.h - (v - ED_RANGE[0]) / (ED_RANGE[1] - ED_RANGE[0]) * b.h; }
+        function edInvX(px, b) { return (px - b.x) / b.w; }
+        function edInvY(py, b) { return ED_RANGE[0] + (b.y + b.h - py) / b.h * (ED_RANGE[1] - ED_RANGE[0]); }
+
+        editor.onDraw = function () {
+            var g = this.graphics;
+            var b = edBox();
+            var e = lib.edit;
+            var i;
+
+            uiRoundRect(g, 0, 0, this.size[0], this.size[1], 5);
+            g.fillPath(uiBrush(g, THEME.well));
+
+            var top = edY(1, b);
+            var bottom = edY(0, b);
+
+            // área 0..1 e grade
+            g.newPath();
+            g.rectPath(edX(0, b), top, b.w, bottom - top);
+            g.fillPath(uiBrush(g, THEME.grid));
+
+            g.newPath();
+            for (i = 1; i < 4; i++) {
+                var gx = Math.round(edX(i / 4, b)) + 0.5;
+                g.moveTo(gx, top);
+                g.lineTo(gx, bottom);
+                var gy = Math.round(edY(i / 4, b)) + 0.5;
+                g.moveTo(edX(0, b), gy);
+                g.lineTo(edX(1, b), gy);
+            }
+            g.strokePath(uiPen(g, THEME.surface, 1));
+
+            g.newPath();
+            g.moveTo(edX(0, b), bottom);
+            g.lineTo(edX(1, b), top);
+            g.strokePath(uiPen(g, THEME.line, 1));
+
+            // alças
+            var h1 = [edX(e.x1, b), edY(e.y1, b)];
+            var h2 = [edX(e.x2, b), edY(e.y2, b)];
+
+            g.newPath();
+            g.moveTo(edX(0, b), bottom);
+            g.lineTo(h1[0], h1[1]);
+            g.moveTo(edX(1, b), top);
+            g.lineTo(h2[0], h2[1]);
+            g.strokePath(uiPen(g, THEME.textDim, 1));
+
+            uiStrokeCurve(g, e, b.x, b.y, b.w, b.h, ED_RANGE, THEME.accent, 3);
+
+            var ends = [[edX(0, b), bottom], [edX(1, b), top]];
+            for (i = 0; i < 2; i++) {
+                g.newPath();
+                g.rectPath(ends[i][0] - 3, ends[i][1] - 3, 6, 6);
+                g.fillPath(uiBrush(g, THEME.text));
+            }
+
+            var hs = [h1, h2];
+            for (i = 0; i < 2; i++) {
+                g.newPath();
+                g.ellipsePath(hs[i][0] - 6, hs[i][1] - 6, 12, 12);
+                g.fillPath(uiBrush(g, drag === i + 1 ? THEME.accent : THEME.text));
+                g.newPath();
+                g.ellipsePath(hs[i][0] - 6, hs[i][1] - 6, 12, 12);
+                g.strokePath(uiPen(g, THEME.well, 2));
             }
         };
 
+        var drag = 0;
+
+        editor.addEventListener("mousedown", function (ev) {
+            var b = edBox();
+            var e = lib.edit;
+            var d1 = Math.sqrt(Math.pow(ev.clientX - edX(e.x1, b), 2) + Math.pow(ev.clientY - edY(e.y1, b), 2));
+            var d2 = Math.sqrt(Math.pow(ev.clientX - edX(e.x2, b), 2) + Math.pow(ev.clientY - edY(e.y2, b), 2));
+
+            drag = Math.min(d1, d2) <= 16 ? (d1 <= d2 ? 1 : 2) : 0;
+            if (drag) uiRedraw(editor);
+        });
+
+        editor.addEventListener("mousemove", function (ev) {
+            if (!drag) return;
+
+            var b = edBox();
+            var vx = Math.max(0, Math.min(1, edInvX(ev.clientX, b)));
+            var vy = Math.max(ED_RANGE[0], Math.min(ED_RANGE[1], edInvY(ev.clientY, b)));
+
+            if (ev.shiftKey) {
+                vx = Math.round(vx * 20) / 20;
+                vy = Math.round(vy * 20) / 20;
+            }
+
+            if (drag === 1) {
+                lib.edit.x1 = round3(vx);
+                lib.edit.y1 = round3(vy);
+            } else {
+                lib.edit.x2 = round3(vx);
+                lib.edit.y2 = round3(vy);
+            }
+
+            syncEditorFields();
+            uiRedraw(editor);
+        });
+
+        function endDrag() {
+            if (!drag) return;
+            drag = 0;
+            uiRedraw(editor);
+        }
+
+        editor.addEventListener("mouseup", endDrag);
+        tab.addEventListener("mouseup", endDrag);
+
+        var valRow = edSec.add("group");
+        valRow.orientation = "row";
+        valRow.alignChildren = ["fill", "center"];
+
+        uiLabel(valRow, "Bezier:");
+        var txtValues = valRow.add("edittext", undefined, "");
+        txtValues.alignment = ["fill", "center"];
+        txtValues.helpTip = "x1, y1, x2, y2 — pode colar direto do cubic-bezier.com";
+
+        var infoText = uiLabel(edSec, "");
+        infoText.alignment = ["fill", "top"];
+
+        var nameRow = edSec.add("group");
+        nameRow.orientation = "row";
+        nameRow.alignChildren = ["fill", "center"];
+
+        uiLabel(nameRow, "Nome:");
+        var txtName = nameRow.add("edittext", undefined, "");
+        txtName.alignment = ["fill", "center"];
+        txtName.characters = 12;
+
+        uiLabel(nameRow, "Categoria:");
+        var txtCat = nameRow.add("edittext", undefined, "Minhas");
+        txtCat.characters = 9;
+        txtCat.helpTip = "Digite uma categoria existente ou crie uma nova";
+
+        var manageRow = edSec.add("group");
+        manageRow.orientation = "row";
+        manageRow.alignChildren = ["fill", "center"];
+        manageRow.spacing = 4;
+
+        var btnNew = uiButton(manageRow, "Nova", {tip: "Limpa o editor para uma curva nova"});
+        var btnSave = uiButton(manageRow, "Salvar", {tip: "Salva (ou atualiza, se o nome já existir)"});
+        var btnFav = uiButton(manageRow, "★", {width: 30, tip: "Favoritar / desfavoritar"});
+        var btnLeft = uiButton(manageRow, "◀", {width: 26, tip: "Mover para trás na lista"});
+        var btnRight = uiButton(manageRow, "▶", {width: 26, tip: "Mover para frente na lista"});
+        var btnDelete = uiButton(manageRow, "Excluir");
+
+        // ----- Aplicar -----
+        var applySec = uiSection(tab, "Aplicar");
+
+        var modeRow = applySec.add("group");
+        modeRow.orientation = "row";
+        modeRow.alignChildren = ["fill", "center"];
+
+        var btnCapture = uiButton(modeRow, "Capturar das keys", {
+            tip: "Lê a curva entre as duas keyframes selecionadas"
+        });
+        var ddMode = modeRow.add("dropdownlist", undefined, [
+            "Entrada e saída",
+            "Só saída (1ª key)",
+            "Só entrada (2ª key)"
+        ]);
+        ddMode.selection = 0;
+
+        var btnApply = uiButton(applySec, "APLICAR NAS KEYFRAMES", {primary: true});
+
+        var ioRow = applySec.add("group");
+        ioRow.orientation = "row";
+        ioRow.alignChildren = ["fill", "center"];
+        ioRow.spacing = 4;
+
+        var btnImport = uiButton(ioRow, "Importar…", {tip: "Junta curvas de um arquivo .txt"});
+        var btnExport = uiButton(ioRow, "Exportar…", {tip: "Salva sua biblioteca num .txt para backup ou para compartilhar"});
+        var btnRestore = uiButton(ioRow, "Restaurar padrões", {tip: "Recoloca as curvas que vêm com o painel (não apaga as suas)"});
+
+        var status = addStatus(tab, "Clique numa curva para editar. Alt+clique aplica direto.");
+
+        // ----- lógica -----
+
+        function categories() {
+            var seen = {};
+            var out = [];
+            for (var i = 0; i < curves.length; i++) {
+                if (!seen["k" + curves[i].cat]) {
+                    seen["k" + curves[i].cat] = true;
+                    out.push(curves[i].cat);
+                }
+            }
+            return out;
+        }
+
+        function refreshCategories() {
+            lib.busy = true;
+            ddCat.removeAll();
+
+            var names = [ALL, FAVS].concat(categories());
+            var pick = 0;
+
+            for (var i = 0; i < names.length; i++) {
+                ddCat.add("item", names[i]);
+                if (names[i] === lib.cat) pick = i;
+            }
+
+            ddCat.selection = pick;
+            lib.cat = names[pick];
+            lib.busy = false;
+        }
+
+        function filteredCurves() {
+            var q = trimString(txtFind.text).toLowerCase();
+            var out = [];
+
+            for (var i = 0; i < curves.length; i++) {
+                var c = curves[i];
+                if (lib.cat === FAVS && !c.fav) continue;
+                if (lib.cat !== ALL && lib.cat !== FAVS && c.cat !== lib.cat) continue;
+                if (q !== "" && c.name.toLowerCase().indexOf(q) === -1) continue;
+                out.push(c);
+            }
+
+            return out;
+        }
+
+        function refreshGrid() {
+            var list = filteredCurves();
+            var pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+
+            if (lib.page >= pages) lib.page = pages - 1;
+            if (lib.page < 0) lib.page = 0;
+
+            for (var i = 0; i < slots.length; i++) {
+                var c = list[lib.page * PER_PAGE + i] || null;
+                slots[i].mesmoCurve = c;
+                slots[i].helpTip = c ? (c.name + "  [" + c.cat + "]\n" + curveValuesText(c)) : "";
+            }
+
+            pageText.text =
+                (lib.page + 1) + " / " + pages + "   ·   " +
+                list.length + (list.length === 1 ? " curva" : " curvas");
+
+            btnPrev.enabled = lib.page > 0;
+            btnNext.enabled = lib.page < pages - 1;
+
+            uiRedraw(grid);
+            uiRedraw(btnPrev);
+            uiRedraw(btnNext);
+        }
+
+        function syncEditorFields() {
+            var e = lib.edit;
+            txtValues.text = curveValuesText(e);
+            infoText.text =
+                "Influência  saída " + Math.round(e.x1 * 100) +
+                "%  ·  entrada " + Math.round((1 - e.x2) * 100) + "%";
+        }
+
+        function loadIntoEditor(c) {
+            lib.selected = c ? c.name : null;
+            lib.edit = c
+                ? makeCurve(c.name, c.cat, c.x1, c.y1, c.x2, c.y2, c.fav)
+                : makeCurve("", txtCat.text || "Minhas", 0.333, 0, 0.667, 1, false);
+
+            txtName.text = lib.edit.name;
+            txtCat.text = lib.edit.cat;
+            syncEditorFields();
+            uiRedraw(editor);
+        }
+
+        function persist() {
+            return writeCurveFile(getCurveStoreFile(), curves);
+        }
+
+        function selectedIndex() {
+            return lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
+        }
+
+        function applyCurve(c) {
+            var comp = app.project ? app.project.activeItem : null;
+
+            if (!isComp(comp)) {
+                alert("Abra uma composição e selecione as keyframes.");
+                return;
+            }
+
+            var found = collectCurveSegments(comp);
+
+            if (found.segments.length === 0) {
+                alert(
+                    "Selecione pelo menos duas keyframes vizinhas " +
+                    "(ou uma keyframe que tenha outra depois dela)." +
+                    (found.skipped ? "\n\nPaths, textos e propriedades sem valor numérico não são suportados." : "")
+                );
+                return;
+            }
+
+            var modeIdx = ddMode.selection ? ddMode.selection.index : 0;
+            var mode = modeIdx === 1 ? "out" : (modeIdx === 2 ? "in" : "both");
+            var ok = 0;
+            var errors = [];
+
+            app.beginUndoGroup("Mesmo Tools - Curva " + (c.name || ""));
+
+            try {
+                for (var i = 0; i < found.segments.length; i++) {
+                    var seg = found.segments[i];
+                    try {
+                        if (applyCurveToSegment(seg[0], seg[1], seg[2], c, mode)) ok++;
+                    } catch (e) {
+                        var pn = "Propriedade";
+                        try { pn = seg[0].name; } catch (nErr) {}
+                        errors.push(pn + ": " + e.toString().replace("Error: ", ""));
+                    }
+                }
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text =
+                (c.name ? "\"" + c.name + "\" " : "Curva ") + "aplicada em " +
+                ok + " trecho(s)" +
+                (found.skipped ? " | " + found.skipped + " propriedade(s) ignorada(s)" : "") +
+                (errors.length ? " | " + errors.length + " erro(s)" : "") + ".";
+
+            if (errors.length) alert("Alguns trechos falharam:\n\n" + errors.join("\n"));
+        }
+
+        function onThumbClick() {
+            var c = this.mesmoCurve;
+            if (!c) return;
+
+            loadIntoEditor(c);
+            uiRedraw(grid);
+
+            var alt = false;
+            try { alt = ScriptUI.environment.keyboardState.altKey; } catch (e) {}
+
+            if (alt) applyCurve(c);
+            else status.text = "Carregada: " + c.name + "  (" + curveValuesText(c) + ")";
+        }
+
+        ddCat.onChange = function () {
+            if (lib.busy || !ddCat.selection) return;
+            lib.cat = ddCat.selection.text;
+            lib.page = 0;
+            saveSetting("curvesCategory", lib.cat);
+            refreshGrid();
+        };
+
+        txtFind.onChanging = function () {
+            lib.page = 0;
+            refreshGrid();
+        };
+
+        btnPrev.onClick = function () { lib.page--; refreshGrid(); };
+        btnNext.onClick = function () { lib.page++; refreshGrid(); };
+
+        txtValues.onChange = function () {
+            var v = parseCurveValues(txtValues.text);
+
+            if (!v) {
+                alert("Use 4 números: x1, y1, x2, y2 (ex.: 0.4, 0, 0.2, 1).");
+                syncEditorFields();
+                return;
+            }
+
+            var e = lib.edit;
+            lib.edit = makeCurve(e.name, e.cat, v[0], v[1], v[2], v[3], e.fav);
+            syncEditorFields();
+            uiRedraw(editor);
+        };
+
+        btnNew.onClick = function () {
+            loadIntoEditor(null);
+            uiRedraw(grid);
+            status.text = "Curva nova: arraste as alças, dê um nome e salve.";
+        };
+
+        btnSave.onClick = function () {
+            var name = trimString(txtName.text);
+            var cat = trimString(txtCat.text) || "Minhas";
+
+            if (name === "") {
+                alert("Dê um nome para a curva.");
+                return;
+            }
+
+            var e = lib.edit;
+            var idx = findCurveIndex(curves, name);
+            var fav = idx !== -1 ? curves[idx].fav : e.fav;
+            var c = makeCurve(name, cat, e.x1, e.y1, e.x2, e.y2, fav);
+
+            if (idx === -1) curves.push(c);
+            else curves[idx] = c;
+
+            if (persist()) {
+                lib.selected = name;
+                lib.edit = makeCurve(name, cat, c.x1, c.y1, c.x2, c.y2, fav);
+                refreshCategories();
+                refreshGrid();
+                status.text = (idx === -1 ? "Curva salva: " : "Curva atualizada: ") + name;
+            }
+        };
+
+        btnFav.onClick = function () {
+            var idx = selectedIndex();
+            if (idx === -1) {
+                alert("Selecione uma curva salva.");
+                return;
+            }
+
+            curves[idx].fav = !curves[idx].fav;
+            if (persist()) {
+                refreshGrid();
+                status.text = curves[idx].fav ? "Adicionada às favoritas." : "Removida das favoritas.";
+            }
+        };
+
+        function moveSelected(step) {
+            var idx = selectedIndex();
+            if (idx === -1) return;
+
+            // Move até a próxima curva visível no filtro atual.
+            var list = filteredCurves();
+            var pos = -1;
+            for (var i = 0; i < list.length; i++) if (list[i].name === lib.selected) pos = i;
+
+            var target = list[pos + step];
+            if (!target) return;
+
+            var tIdx = findCurveIndex(curves, target.name);
+            var tmp = curves[idx];
+            curves[idx] = curves[tIdx];
+            curves[tIdx] = tmp;
+
+            if (persist()) {
+                lib.page = Math.floor((pos + step) / PER_PAGE);
+                refreshGrid();
+            }
+        }
+
+        btnLeft.onClick = function () { moveSelected(-1); };
+        btnRight.onClick = function () { moveSelected(1); };
+
+        btnDelete.onClick = function () {
+            var idx = selectedIndex();
+            if (idx === -1) {
+                alert("Selecione uma curva salva para excluir.");
+                return;
+            }
+
+            var name = curves[idx].name;
+            if (!confirm("Excluir a curva \"" + name + "\"?")) return;
+
+            curves.splice(idx, 1);
+            if (persist()) {
+                loadIntoEditor(null);
+                refreshCategories();
+                refreshGrid();
+                status.text = "Curva excluída: " + name;
+            }
+        };
+
+        btnCapture.onClick = function () {
+            var comp = app.project ? app.project.activeItem : null;
+            if (!isComp(comp)) {
+                alert("Abra uma composição e selecione duas keyframes.");
+                return;
+            }
+
+            var found = collectCurveSegments(comp);
+            if (found.segments.length === 0) {
+                alert("Selecione duas keyframes vizinhas de uma propriedade.");
+                return;
+            }
+
+            try {
+                var seg = found.segments[0];
+                var v = captureCurveFromSegment(seg[0], seg[1], seg[2]);
+                var e = lib.edit;
+
+                lib.selected = null;
+                lib.edit = makeCurve(e.name, e.cat, v.x1, v.y1, v.x2, v.y2, false);
+                if (trimString(txtName.text) === "") txtName.text = "Capturada";
+
+                syncEditorFields();
+                uiRedraw(editor);
+                uiRedraw(grid);
+                status.text = "Curva capturada de \"" + seg[0].name + "\". Dê um nome e salve.";
+            } catch (err) {
+                alert(err.toString().replace("Error: ", ""));
+            }
+        };
+
+        btnApply.onClick = function () {
+            applyCurve(lib.edit);
+        };
+
+        btnExport.onClick = function () {
+            var f = File.saveDialog("Exportar curvas do Mesmo Tools", "Texto:*.txt");
+            if (!f) return;
+            if (!/\.txt$/i.test(f.name)) f = new File(f.fsName + ".txt");
+
+            if (writeCurveFile(f, curves)) {
+                status.text = curves.length + " curva(s) exportada(s).";
+            }
+        };
+
+        btnImport.onClick = function () {
+            var f = File.openDialog("Importar curvas", "Texto:*.txt");
+            if (!f) return;
+
+            var incoming = readCurveFile(f);
+            if (!incoming || incoming.length === 0) {
+                alert("Nenhuma curva válida encontrada nesse arquivo.");
+                return;
+            }
+
+            var added = 0;
+            var updated = 0;
+
+            for (var i = 0; i < incoming.length; i++) {
+                var idx = findCurveIndex(curves, incoming[i].name);
+                if (idx === -1) {
+                    curves.push(incoming[i]);
+                    added++;
+                } else {
+                    curves[idx] = incoming[i];
+                    updated++;
+                }
+            }
+
+            if (persist()) {
+                refreshCategories();
+                refreshGrid();
+                status.text = added + " nova(s), " + updated + " atualizada(s).";
+            }
+        };
+
+        btnRestore.onClick = function () {
+            var defs = defaultCurves();
+            var added = 0;
+
+            for (var i = 0; i < defs.length; i++) {
+                if (findCurveIndex(curves, defs[i].name) === -1) {
+                    curves.push(defs[i]);
+                    added++;
+                }
+            }
+
+            if (added === 0) {
+                status.text = "Todas as curvas padrão já estão na biblioteca.";
+                return;
+            }
+
+            if (persist()) {
+                refreshCategories();
+                refreshGrid();
+                status.text = added + " curva(s) padrão restaurada(s).";
+            }
+        };
+
+        refreshCategories();
+        refreshGrid();
+        loadIntoEditor(null);
+    }
+
+    function buildUI(thisObj) {
+        var win = (thisObj instanceof Panel)
+            ? thisObj
+            : new Window("palette", SCRIPT_NAME, undefined, {resizeable: true});
+
+        win.orientation = "column";
+        win.alignChildren = ["fill", "top"];
+        win.spacing = 6;
+        win.margins = [10, 8, 10, 10];
+
+        uiHeader(win);
+
+        var PAGES = [
+            {label: "Curvas", short: "Ease", tip: "Biblioteca de curvas de velocidade", build: buildCurvesTab},
+            {label: "Comps", short: "Comp", tip: "Resolução, FPS, duração e renderer", build: buildCompsTab},
+            {label: "Duplicar", short: "Dup", tip: "Duplicar comps com precomps independentes", build: buildDuplicaTab},
+            {label: "Explode", short: "Txt", tip: "Dividir camadas de texto", build: buildExplodeTab},
+            {label: "3D", short: "3D", tip: "Ligar/desligar 3D em lote", build: build3DTab},
+            {label: "Expressões", short: "Expr", tip: "Biblioteca de expressões favoritas", build: buildExpressionsTab}
+        ];
+
+        var stack;
+        var pages = [];
+        var hooks = [];
+
+        var nav = uiNav(win, PAGES, function (idx) {
+            for (var i = 0; i < pages.length; i++) pages[i].visible = (i === idx);
+            saveSetting("lastTab", idx);
+            try { if (hooks[idx] && hooks[idx].refresh) hooks[idx].refresh(); } catch (e) {}
+        });
+
+        stack = win.add("group");
+        stack.orientation = "stack";
+        stack.alignment = ["fill", "fill"];
+        stack.alignChildren = ["fill", "top"];
+
+        for (var i = 0; i < PAGES.length; i++) {
+            var page = stack.add("group");
+            page.alignment = ["fill", "fill"];
+            hooks.push(PAGES[i].build(page) || null);
+            page.visible = false;
+            pages.push(page);
+        }
+
+        var start = parseInt(loadSetting("lastTab", "0"), 10);
+        if (isNaN(start) || start < 0 || start >= PAGES.length) start = 0;
+
         win.layout.layout(true);
+        nav.select(start);
 
         win.onResizing =
         win.onResize = function () {
@@ -2231,6 +3725,19 @@
 
         return win;
     }
+
+    // API para outros scripts / KBar:
+    // explodeMesmo({split: "words", deleteOriginal: true, layerOrder: "topToBottom"})
+    $.global.explodeMesmo = function (options) {
+        options = options || {};
+        return explodeSelectedText({
+            split: options.split || "characters",
+            splitWord: options.splitWord || "",
+            rtlText: !!options.rtlText,
+            deleteOriginal: !!options.deleteOriginal,
+            layerOrder: options.layerOrder === "bottomToTop" ? "bottomToTop" : "topToBottom"
+        });
+    };
 
     var panel = buildUI(thisObj);
 
