@@ -6,7 +6,7 @@ Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelera
 |---|---|
 | **Curvas** | Biblioteca de curvas de velocidade. Salve suas curvas favoritas, organize por categoria, marque favoritas, edite arrastando as alças, capture a curva de keyframes que já existem e aplique com um clique. |
 | **Comps** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
-| **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome, pasta de destino e atualização de expressões. |
+| **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
 | **3D** | Liga ou desliga o switch 3D em todas as camadas das comps selecionadas, opcionalmente entrando nas precomps e em camadas bloqueadas. |
 | **Expressões** | Biblioteca de expressões favoritas: salvar, buscar, capturar de uma propriedade e aplicar nas propriedades selecionadas (duplo clique aplica direto). |
@@ -34,6 +34,22 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 
 Funciona em propriedades numéricas (posição, escala, rotação, opacidade, cor, efeitos…). Paths de máscara/shape e Source Text não são suportados.
 Em **Position** com caminho espacial, curvas que passam do limite (tipo *Back*) não ultrapassam o ponto final. Para esse efeito, use **Separate Dimensions**.
+
+## Duplicar com pastas
+
+Com **Organizar na pasta** e **Separar as precomps** ligados, duplicar a comp `Executar` com sufixo `_v02` gera:
+
+```
+📁 v02
+   Executar_v02
+   📁 PRECOMPS_v02
+      (todas as precomps usadas dentro de Executar_v02)
+```
+
+- Deixando o nome da pasta vazio, ele usa o sufixo sem o `_` (`_v02` → `v02`).
+- A pasta é criada ao lado da comp original.
+- Com mais de uma cópia, cada uma ganha sua pasta numerada (`v02 1`, `v02 2`…).
+- A linha "Resultado" mostra como vai ficar antes de duplicar, e o painel lembra suas escolhas.
 
 ## Dicas
 

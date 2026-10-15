@@ -23,6 +23,9 @@
       importar/exportar biblioteca.
     - Explode: recusa texto vertical/justificado (como o avulso fazia) e
       expõe explodeMesmo(options) para outros scripts.
+    - Duplicar: pasta da cópia com a comp principal + subpasta
+      PRECOMPS_<sufixo> com as precomps; nome da pasta sai do sufixo
+      quando vazio; prévia do resultado; lembra as opções.
 
     v1.1
     - Comps: timecode em 23,976 / 29,97 / 59,94 não perde mais frames
@@ -1027,17 +1030,112 @@
         pnlOpts.orientation = "column";
         pnlOpts.alignChildren = ["fill", "top"];
 
-        var cbFolder = pnlOpts.add("checkbox", undefined, "Agrupar numa pasta");
+        var folderRow = pnlOpts.add("group");
+        folderRow.orientation = "row";
+        folderRow.alignChildren = ["fill", "center"];
 
-        var txtFolderName = pnlOpts.add("edittext", undefined, "Duplicated Comps");
-        txtFolderName.enabled = false;
+        var cbFolder = folderRow.add("checkbox", undefined, "Organizar na pasta");
+        var txtFolderName = folderRow.add("edittext", undefined, "");
+        txtFolderName.alignment = ["fill", "center"];
+        txtFolderName.characters = 12;
+        txtFolderName.helpTip = "Vazio = usa o sufixo sem o \"_\" (ex.: _v02 vira v02)";
+
+        var cbPrecompFolder = pnlOpts.add(
+            "checkbox",
+            undefined,
+            "Separar as precomps numa subpasta PRECOMPS"
+        );
+
+        var previewText = uiLabel(pnlOpts, "");
+        previewText.alignment = ["fill", "top"];
 
         var cbExp = pnlOpts.add("checkbox", undefined, "Atualizar expressões");
-        cbExp.value = true;
 
-        cbFolder.onClick = function () {
-            txtFolderName.enabled = this.value;
-        };
+        // Lembra as escolhas entre sessões.
+        cbSfx.value = loadSetting("dupNaming", "1") === "1";
+        ddType.selection = loadSetting("dupNameMode", "0") === "1" ? 1 : 0;
+        txtSfx.text = loadSetting("dupAffix", "_v02");
+        cbFolder.value = loadSetting("dupFolderOn", "1") === "1";
+        txtFolderName.text = loadSetting("dupFolderName", "");
+        cbPrecompFolder.value = loadSetting("dupPrecompFolder", "1") === "1";
+        cbExp.value = loadSetting("dupExpressions", "1") === "1";
+
+        function rememberDupSettings() {
+            saveSetting("dupNaming", cbSfx.value ? "1" : "0");
+            saveSetting("dupNameMode", ddType.selection && ddType.selection.index === 1 ? "1" : "0");
+            saveSetting("dupAffix", txtSfx.text);
+            saveSetting("dupFolderOn", cbFolder.value ? "1" : "0");
+            saveSetting("dupFolderName", txtFolderName.text);
+            saveSetting("dupPrecompFolder", cbPrecompFolder.value ? "1" : "0");
+            saveSetting("dupExpressions", cbExp.value ? "1" : "0");
+        }
+
+        function usingSuffix() {
+            return cbSfx.value && txtSfx.text !== "" &&
+                !(ddType.selection && ddType.selection.index === 1);
+        }
+
+        function usingPrefix() {
+            return cbSfx.value && txtSfx.text !== "" &&
+                ddType.selection && ddType.selection.index === 1;
+        }
+
+        // "_v02" -> "v02"; vazio -> "Cópias"
+        function resolvedFolderName() {
+            var name = trimString(txtFolderName.text);
+            if (name !== "") return name;
+
+            if (cbSfx.value) {
+                name = trimString(txtSfx.text).replace(/^[\s_\-.]+|[\s_\-.]+$/g, "");
+                if (name !== "") return name;
+            }
+
+            return "Cópias";
+        }
+
+        function precompFolderName() {
+            if (usingSuffix()) return "PRECOMPS" + txtSfx.text;
+            if (usingPrefix()) return txtSfx.text + "PRECOMPS";
+            return "PRECOMPS";
+        }
+
+        function refreshDupUI() {
+            txtFolderName.enabled = cbFolder.value;
+            cbPrecompFolder.enabled = cbFolder.value;
+            cbPrecompFolder.text = "Separar as precomps numa subpasta " + precompFolderName();
+
+            var sel = app.project ? app.project.selection : [];
+            var sample = "Comp";
+            for (var i = 0; sel && i < sel.length; i++) {
+                if (sel[i] instanceof CompItem) {
+                    sample = sel[i].name;
+                    break;
+                }
+            }
+
+            var compName = processName(sample);
+
+            if (!cbFolder.value) {
+                previewText.text = "Resultado: " + compName + "  (na mesma pasta da original)";
+            } else if (cbPrecompFolder.value) {
+                previewText.text =
+                    "Resultado:  [" + resolvedFolderName() + "]  →  " + compName +
+                    "  +  [" + precompFolderName() + "]";
+            } else {
+                previewText.text =
+                    "Resultado:  [" + resolvedFolderName() + "]  →  " + compName + " + precomps";
+            }
+        }
+
+        cbFolder.onClick = refreshDupUI;
+        cbPrecompFolder.onClick = refreshDupUI;
+        cbSfx.onClick = refreshDupUI;
+        ddType.onChange = refreshDupUI;
+        txtSfx.onChanging = refreshDupUI;
+        txtFolderName.onChanging = refreshDupUI;
+        cbSrch.onClick = refreshDupUI;
+        txtSrch.onChanging = refreshDupUI;
+        txtRpl.onChanging = refreshDupUI;
 
         var bottomGrp = tab.add("group");
         bottomGrp.orientation = "row";
@@ -1060,13 +1158,8 @@
                 newName = newName.split(txtSrch.text).join(txtRpl.text);
             }
 
-            if (cbSfx.value) {
-                if (ddType.selection && ddType.selection.index === 0) {
-                    newName = newName + txtSfx.text;
-                } else {
-                    newName = txtSfx.text + newName;
-                }
-            }
+            if (usingPrefix()) newName = txtSfx.text + newName;
+            else if (usingSuffix()) newName = newName + txtSfx.text;
 
             return newName;
         }
@@ -1076,7 +1169,11 @@
             Uma precomp usada em várias layers (ou em várias comps selecionadas)
             é duplicada uma única vez e reaproveitada.
         */
-        function deepDupe(item, destFolder, cache, nameOverride) {
+        /*
+            folders.top     -> pasta da comp principal (ou null = fica onde o AE pôs)
+            folders.nested() -> pasta das precomps (criada só quando precisar)
+        */
+        function deepDupe(item, folders, cache, nameOverride, isTop) {
             if (!(item instanceof CompItem)) return item;
 
             var key = "c" + item.id;
@@ -1086,7 +1183,8 @@
             newItem.name = nameOverride || processName(item.name);
             cache[key] = newItem;
 
-            if (destFolder) newItem.parentFolder = destFolder;
+            var dest = isTop ? folders.top : folders.nested();
+            if (dest) newItem.parentFolder = dest;
 
             for (var i = 1; i <= newItem.numLayers; i++) {
                 var curLayer = newItem.layer(i);
@@ -1094,7 +1192,7 @@
                 try {
                     if (curLayer.source instanceof CompItem) {
                         curLayer.replaceSource(
-                            deepDupe(curLayer.source, destFolder, cache, null),
+                            deepDupe(curLayer.source, folders, cache, null, false),
                             cbExp.value
                         );
                     }
@@ -1102,6 +1200,29 @@
             }
 
             return newItem;
+        }
+
+        function makeFolders(baseName, parent) {
+            var folders = {top: null, sub: null};
+
+            if (!cbFolder.value) {
+                folders.nested = function () { return null; };
+                return folders;
+            }
+
+            folders.top = app.project.items.addFolder(baseName);
+            try { folders.top.parentFolder = parent; } catch (eP) {}
+
+            folders.nested = function () {
+                if (!cbPrecompFolder.value) return folders.top;
+                if (!folders.sub) {
+                    folders.sub = app.project.items.addFolder(precompFolderName());
+                    folders.sub.parentFolder = folders.top;
+                }
+                return folders.sub;
+            };
+
+            return folders;
         }
 
         btnRun.onClick = function () {
@@ -1119,7 +1240,7 @@
 
             var num = parseInt(copyCount.text, 10);
             if (isNaN(num) || num < 1 || num > 999) {
-                alert("Copies precisa ser um número entre 1 e 999.");
+                alert("Cópias precisa ser um número entre 1 e 999.");
                 return;
             }
 
@@ -1135,35 +1256,48 @@
 
             app.beginUndoGroup("Duplica Mesmo");
 
-            var targetFolder = null;
             var made = 0;
+            var precomps = 0;
+            var baseFolder = resolvedFolderName();
+            var parentFolder = app.project.rootFolder;
+            try { parentFolder = valid[0].parentFolder; } catch (eParent) {}
+
+            rememberDupSettings();
 
             try {
-                if (cbFolder.value) {
-                    targetFolder = app.project.items.addFolder(
-                        txtFolderName.text || "Duplicated Comps"
-                    );
-                }
-
-                // Cada rodada de cópia tem o próprio cache: cópia 2 não reaproveita
-                // as precomps da cópia 1. Com mais de 1 cópia, numera as comps do topo.
+                // Cada rodada de cópia tem o próprio cache e as próprias pastas.
+                // Com mais de 1 cópia, comps e pastas do topo ganham número.
                 for (var c = 0; c < num; c++) {
                     var cache = {};
+                    var tag = num > 1 ? " " + (c + 1) : "";
+                    var folders = makeFolders(baseFolder + tag, parentFolder);
 
                     for (i = 0; i < valid.length; i++) {
-                        var topName = processName(valid[i].name);
-                        if (num > 1) topName += " " + (c + 1);
-
-                        deepDupe(valid[i], targetFolder, cache, topName);
+                        deepDupe(valid[i], folders, cache, processName(valid[i].name) + tag, true);
                         made++;
+                    }
+
+                    for (var k in cache) {
+                        if (cache.hasOwnProperty(k)) precomps++;
                     }
                 }
             } finally {
                 app.endUndoGroup();
             }
 
-            status.text = made + " cópia(s) principal(is) criada(s).";
+            precomps -= made;
+
+            status.text =
+                made + " comp(s) duplicada(s)" +
+                (precomps > 0 ? " + " + precomps + " precomp(s)" : "") +
+                (cbFolder.value ? " em \"" + baseFolder + "\"" : "") + ".";
         };
+        tab.addEventListener("mouseover", function () {
+            try { refreshDupUI(); } catch (e) {}
+        });
+        refreshDupUI();
+
+        return {refresh: refreshDupUI};
     }
 
     function isTextLayer(layer) {
