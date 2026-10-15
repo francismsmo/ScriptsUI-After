@@ -73,7 +73,7 @@
             for (var i = 1; i <= newItem.numLayers; i++) {
                 var curLayer = newItem.layer(i);
                 if (curLayer.source instanceof CompItem) {
-                    curLayer.replaceSource(deepDupe(curLayer.source, destFolder), false);
+                    curLayer.replaceSource(deepDupe(curLayer.source, destFolder), cbExp.value);
                 }
             }
             return newItem;

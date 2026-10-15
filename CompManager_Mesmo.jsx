@@ -11,11 +11,23 @@
 
     Expression favorites are stored locally in:
     Folder.userData/MesmoTools/expression_favorites.txt
+
+    v1.1
+    - Comps: timecode em 23,976 / 29,97 / 59,94 não perde mais frames
+      ao ler e reaplicar a duração; aceita também "10s" e "250f".
+    - Duplica: precomps repetidas são duplicadas uma vez só por cópia;
+      com várias cópias, as comps do topo são numeradas.
+    - Explode: layer auxiliar sempre removida; a original nunca é excluída
+      se alguma peça falhar; as peças novas ficam selecionadas.
+    - 3D: ignora câmeras, luzes e layers de áudio; conta só o que mudou.
+    - Expressions: avisa quando a expressão aplicada dá erro no AE.
+    - Comps: resumo da seleção atualiza ao voltar para a aba.
 */
 
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
+    var SCRIPT_VERSION = "1.1";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -57,6 +69,12 @@
         return status;
     }
 
+    /*
+        Timecode non-drop-frame, igual ao After Effects:
+        os campos contam frames NOMINAIS (30 para 29,97; 24 para 23,976...),
+        e a duração real em segundos é totalFrames / fps.
+        Formatar e ler usando a mesma base garante ida e volta sem perder frames.
+    */
     function formatTimecode(seconds, fps) {
         if (seconds < 0) seconds = 0;
 
@@ -64,7 +82,7 @@
         var totalFrames = Math.round(seconds * fps);
 
         var frames = totalFrames % nominalFPS;
-        var totalSeconds = Math.floor(totalFrames / fps);
+        var totalSeconds = Math.floor(totalFrames / nominalFPS);
         var secs = totalSeconds % 60;
         var minsTotal = Math.floor(totalSeconds / 60);
         var mins = minsTotal % 60;
@@ -76,25 +94,41 @@
     function parseTimecode(tc, fps) {
         tc = trimString(tc);
 
-        var m = tc.match(/^(\d+):([0-5]\d):([0-5]\d):(\d{2,3})$/);
-        if (!m) {
-            throw new Error("Duração inválida. Use o formato 0:00:00:00.");
-        }
-
-        var h = parseInt(m[1], 10);
-        var min = parseInt(m[2], 10);
-        var sec = parseInt(m[3], 10);
-        var fr = parseInt(m[4], 10);
         var nominalFPS = Math.max(1, Math.round(fps));
+        var totalFrames;
 
-        if (fr >= nominalFPS) {
-            throw new Error(
-                "O campo de frames (" + fr + ") precisa ser menor que " +
-                nominalFPS + " para " + fps + " fps."
-            );
+        // Atalhos: "10" ou "10s" = segundos; "250f" = frames.
+        var mSec = tc.match(/^(\d+(?:[.,]\d+)?)\s*s?$/i);
+        var mFrm = tc.match(/^(\d+)\s*f$/i);
+
+        if (mFrm) {
+            totalFrames = parseInt(mFrm[1], 10);
+        } else if (mSec) {
+            totalFrames = Math.round(parseLocalizedNumber(mSec[1]) * fps);
+        } else {
+            var m = tc.match(/^(\d+):([0-5]\d):([0-5]\d)[:;](\d{1,3})$/);
+            if (!m) {
+                throw new Error(
+                    "Duração inválida. Use 0:00:00:00, segundos (10s) ou frames (250f)."
+                );
+            }
+
+            var h = parseInt(m[1], 10);
+            var min = parseInt(m[2], 10);
+            var sec = parseInt(m[3], 10);
+            var fr = parseInt(m[4], 10);
+
+            if (fr >= nominalFPS) {
+                throw new Error(
+                    "O campo de frames (" + fr + ") precisa ser menor que " +
+                    nominalFPS + " para " + fps + " fps."
+                );
+            }
+
+            totalFrames = ((h * 3600) + (min * 60) + sec) * nominalFPS + fr;
         }
 
-        var duration = (h * 3600) + (min * 60) + sec + (fr / fps);
+        var duration = totalFrames / fps;
 
         if (duration <= 0) {
             throw new Error("A duração precisa ser maior que zero.");
@@ -315,7 +349,7 @@
         durationRow.add("statictext", undefined, "Tempo:");
         var txtDuration = durationRow.add("edittext", undefined, "0:00:10:00");
         txtDuration.characters = 12;
-        durationRow.add("statictext", undefined, "H:MM:SS:FF");
+        durationRow.add("statictext", undefined, "H:MM:SS:FF | 10s | 250f");
 
         var rendererPanel = tab.add("panel", undefined, "3D Renderer");
         rendererPanel.orientation = "column";
@@ -546,6 +580,8 @@
 
         tab.addEventListener("mouseover", refreshSelectionText);
         refreshSelectionText();
+
+        return {refresh: refreshSelectionText};
     }
 
     function buildDuplicaTab(tab) {
@@ -629,11 +665,20 @@
             return newName;
         }
 
-        function deepDupe(item, destFolder) {
+        /*
+            cache: { compId: cópia } compartilhado durante UMA cópia completa.
+            Uma precomp usada em várias layers (ou em várias comps selecionadas)
+            é duplicada uma única vez e reaproveitada.
+        */
+        function deepDupe(item, destFolder, cache, nameOverride) {
             if (!(item instanceof CompItem)) return item;
 
+            var key = "c" + item.id;
+            if (cache[key]) return cache[key];
+
             var newItem = item.duplicate();
-            newItem.name = processName(item.name);
+            newItem.name = nameOverride || processName(item.name);
+            cache[key] = newItem;
 
             if (destFolder) newItem.parentFolder = destFolder;
 
@@ -643,7 +688,7 @@
                 try {
                     if (curLayer.source instanceof CompItem) {
                         curLayer.replaceSource(
-                            deepDupe(curLayer.source, destFolder),
+                            deepDupe(curLayer.source, destFolder, cache, null),
                             cbExp.value
                         );
                     }
@@ -694,9 +739,16 @@
                     );
                 }
 
-                for (i = 0; i < valid.length; i++) {
-                    for (var c = 0; c < num; c++) {
-                        deepDupe(valid[i], targetFolder);
+                // Cada rodada de cópia tem o próprio cache: cópia 2 não reaproveita
+                // as precomps da cópia 1. Com mais de 1 cópia, numera as comps do topo.
+                for (var c = 0; c < num; c++) {
+                    var cache = {};
+
+                    for (i = 0; i < valid.length; i++) {
+                        var topName = processName(valid[i].name);
+                        if (num > 1) topName += " " + (c + 1);
+
+                        deepDupe(valid[i], targetFolder, cache, topName);
                         made++;
                     }
                 }
@@ -1292,7 +1344,7 @@
 
         if (!isComp(comp)) {
             alert("Abra uma composição e selecione uma ou mais camadas de texto.");
-            return {pieces: 0, skipped: 0};
+            return {pieces: 0, skipped: 0, failed: 0, keptOriginals: 0};
         }
 
         var selected = comp.selectedLayers;
@@ -1304,11 +1356,14 @@
 
         if (textLayers.length === 0) {
             alert("Nenhuma camada de texto selecionada.");
-            return {pieces: 0, skipped: selected.length};
+            return {pieces: 0, skipped: selected.length, failed: 0, keptOriginals: 0};
         }
 
         var totalPieces = 0;
         var skipped = 0;
+        var failedPieces = 0;
+        var keptOriginals = 0;
+        var allCreated = [];
 
         app.beginUndoGroup("Explode Mesmo");
 
@@ -1339,31 +1394,39 @@
                 }
 
                 var helper = layer.duplicate();
-
-                try {
-                    helper.name = "__EXPLODE_MESMO_MEASURE__";
-                    helper.shy = true;
-                } catch (e0) {}
-
                 var created = [];
 
-                for (var j = 0; j < segments.length; j++) {
+                try {
                     try {
-                        created.push(
-                            createExplodedPiece(
-                                layer,
-                                helper,
-                                doc,
-                                segments[j],
-                                comp.time
-                            )
-                        );
-                    } catch (pieceErr) {}
+                        helper.name = "__EXPLODE_MESMO_MEASURE__";
+                        helper.shy = true;
+                    } catch (e0) {}
+
+                    for (var j = 0; j < segments.length; j++) {
+                        try {
+                            created.push(
+                                createExplodedPiece(
+                                    layer,
+                                    helper,
+                                    doc,
+                                    segments[j],
+                                    comp.time
+                                )
+                            );
+                        } catch (pieceErr) {
+                            failedPieces++;
+                        }
+                    }
+                } finally {
+                    // A layer auxiliar nunca pode sobrar na comp.
+                    try { helper.remove(); } catch (e1) {}
                 }
 
-                try {
-                    helper.remove();
-                } catch (e1) {}
+                if (created.length === 0) {
+                    // Nada foi criado: preserva a original mesmo com "Excluir" ativo.
+                    skipped++;
+                    continue;
+                }
 
                 reorderExplodedLayers(
                     created,
@@ -1373,20 +1436,34 @@
                 );
 
                 totalPieces += created.length;
+                for (var k = 0; k < created.length; k++) allCreated.push(created[k]);
 
-                if (opts.deleteOriginal) {
+                if (opts.deleteOriginal && created.length === segments.length) {
                     try {
                         layer.remove();
                     } catch (e2) {}
+                } else if (opts.deleteOriginal) {
+                    keptOriginals++;
                 }
             }
+
+            // Deixa selecionadas só as peças novas, prontas para animar.
+            try {
+                for (i = 0; i < textLayers.length; i++) {
+                    try { textLayers[i].selected = false; } catch (eSel) {}
+                }
+                for (i = 0; i < allCreated.length; i++) allCreated[i].selected = true;
+            } catch (eSel2) {}
+
         } finally {
             app.endUndoGroup();
         }
 
         return {
             pieces: totalPieces,
-            skipped: skipped
+            skipped: skipped,
+            failed: failedPieces,
+            keptOriginals: keptOriginals
         };
     }
 
@@ -1515,7 +1592,16 @@
             status.text =
                 result.pieces + " layer(s) criada(s)" +
                 (result.skipped ? " | " + result.skipped + " ignorada(s)" : "") +
+                (result.failed ? " | " + result.failed + " peça(s) falharam" : "") +
                 ".";
+
+            if (result.keptOriginals) {
+                alert(
+                    "Algumas peças não puderam ser criadas, então " +
+                    result.keptOriginals +
+                    " camada(s) original(is) foram mantidas para você não perder o texto."
+                );
+            }
         };
     }
 
@@ -1575,40 +1661,48 @@
 
             var recursive = recursiveCheckbox.value;
             var processLocked = lockedCheckbox.value;
-            var processed = [];
+            var processed = {};
             var compCount = 0;
             var layerCount = 0;
 
-            function alreadyProcessed(comp) {
-                for (var i = 0; i < processed.length; i++) {
-                    if (processed[i] === comp.id) return true;
+            // Câmeras, luzes e layers só de áudio não têm switch 3D.
+            function canBe3D(layer) {
+                if (layer instanceof CameraLayer || layer instanceof LightLayer) {
+                    return false;
                 }
-                return false;
+                try {
+                    if (layer.hasVideo === false) return false;
+                } catch (eV) {}
+                return true;
             }
 
             function processComp(comp) {
                 if (!(comp instanceof CompItem)) return;
-                if (alreadyProcessed(comp)) return;
 
-                processed.push(comp.id);
+                var key = "c" + comp.id;
+                if (processed[key]) return;
+
+                processed[key] = true;
                 compCount++;
 
                 for (var i = 1; i <= comp.numLayers; i++) {
                     var layer = comp.layer(i);
 
                     try {
-                        var wasLocked = layer.locked;
+                        if (canBe3D(layer) && layer.threeDLayer !== enable3D) {
+                            var wasLocked = layer.locked;
 
-                        if (wasLocked && processLocked) layer.locked = false;
+                            if (wasLocked && processLocked) layer.locked = false;
 
-                        if (!layer.locked) {
-                            try {
-                                layer.threeDLayer = enable3D;
-                                layerCount++;
-                            } catch (e0) {}
+                            if (!layer.locked) {
+                                try {
+                                    layer.threeDLayer = enable3D;
+                                    layerCount++;
+                                } catch (e0) {}
+                            }
+
+                            if (wasLocked && processLocked) layer.locked = true;
                         }
-
-                        if (wasLocked && processLocked) layer.locked = true;
                     } catch (e1) {}
 
                     if (recursive) {
@@ -1637,7 +1731,7 @@
 
             status.text =
                 compCount + " comps | " +
-                layerCount + " camadas processadas.";
+                layerCount + " camada(s) alterada(s).";
         }
 
         make3DButton.onClick = function () {
@@ -1914,6 +2008,7 @@
 
             var applied = 0;
             var errors = [];
+            var warnings = [];
 
             app.beginUndoGroup("Mesmo Tools - Apply Expression");
 
@@ -1922,6 +2017,16 @@
                     try {
                         props[i].expression = code;
                         applied++;
+
+                        // O AE aceita a expressão mesmo com erro; avisa se ela quebrou.
+                        var exprErr = "";
+                        try { exprErr = props[i].expressionError; } catch (eErr) {}
+
+                        if (exprErr) {
+                            var badName = "Property";
+                            try { badName = props[i].name; } catch (nErr) {}
+                            warnings.push(badName + ": " + exprErr);
+                        }
                     } catch (e) {
                         var propName = "Property";
                         try { propName = props[i].name; } catch (nameErr) {}
@@ -1941,8 +2046,20 @@
                 (errors.length ? " | " + errors.length + " erro(s)" : "") +
                 ".";
 
-            if (errors.length) {
-                alert("Algumas propriedades falharam:\n\n" + errors.join("\n"));
+            if (warnings.length) {
+                status.text += " | " + warnings.length + " com erro de expressão";
+            }
+
+            if (errors.length || warnings.length) {
+                var msg = "";
+                if (errors.length) {
+                    msg += "Não foi possível aplicar em:\n" + errors.join("\n");
+                }
+                if (warnings.length) {
+                    if (msg) msg += "\n\n";
+                    msg += "Aplicada, mas a expressão deu erro em:\n" + warnings.join("\n");
+                }
+                alert(msg);
             }
         }
 
@@ -2078,7 +2195,7 @@
         var title = header.add("statictext", undefined, "MESMO TOOLS");
         title.alignment = ["fill", "center"];
 
-        header.add("statictext", undefined, "v1.0");
+        header.add("statictext", undefined, "v" + SCRIPT_VERSION);
 
         var tabs = win.add("tabbedpanel");
         tabs.alignment = ["fill", "fill"];
@@ -2090,13 +2207,20 @@
         var tab3D = tabs.add("tab", undefined, "3D");
         var tabExpressions = tabs.add("tab", undefined, "Expressions");
 
-        buildCompsTab(tabComps);
+        var compsTab = buildCompsTab(tabComps);
         buildDuplicaTab(tabDuplica);
         buildExplodeTab(tabExplode);
         build3DTab(tab3D);
         buildExpressionsTab(tabExpressions);
 
         tabs.selection = tabComps;
+
+        // Atualiza o resumo da seleção sempre que voltar para a aba Comps.
+        tabs.onChange = function () {
+            if (tabs.selection === tabComps) {
+                try { compsTab.refresh(); } catch (e) {}
+            }
+        };
 
         win.layout.layout(true);
 
