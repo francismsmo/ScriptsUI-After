@@ -4,6 +4,7 @@
 
     Abas:
     - Animação = Curvas + Explode (juntos na mesma tela)
+    - Camadas = Criar + Anchor Point + Extract + Batidas
     - Comps = Ajustes + Duplicar + 3D / Blur (juntos na mesma tela)
     - Expressões: atalhos prontos + suas expressões favoritas
 
@@ -26,6 +27,10 @@
       lado a lado no painel largo, empilhadas no estreito (botão ⇆ força
       um modo); cada ferramenta recolhe/expande pelo cabeçalho;
       editor de curva quadrado e compacto.
+    - Novo painel Camadas: criar Texto/Adjustment/Null/Sólido/Shape/
+      Câmera/Luz; Null no atributo (null no ponto exato, linkado, nome
+      "Camada-position-null"); grade 3x3 de Anchor Point; Extract de
+      grupos de shape; marcadores nas batidas do áudio.
     - Curvas: modo Velocidade (speed graph) no editor; arrastar para fora
       do editor solta a alça; campos acompanham a largura do painel.
     - Desempenho: recolher/expandir e trocar de aba recalculam só a aba
@@ -4771,6 +4776,835 @@
 
     }
 
+    // ================================================================
+    // CAMADAS — criar camadas, null no atributo, anchor point, extract
+    // e marcadores nas batidas do áudio.
+    // ================================================================
+
+    function activeCompOrAlert() {
+        var comp = app.project ? app.project.activeItem : null;
+        if (!isComp(comp)) {
+            alert("Abra uma composição primeiro.");
+            return null;
+        }
+        return comp;
+    }
+
+    function layerNameExists(comp, name) {
+        for (var i = 1; i <= comp.numLayers; i++) {
+            if (comp.layer(i).name === name) return true;
+        }
+        return false;
+    }
+
+    // "Null", "Null 2", "Null 3"...
+    function uniqueLayerName(comp, base) {
+        var name = base;
+        var n = 2;
+        while (layerNameExists(comp, name)) {
+            name = base + " " + n;
+            n++;
+        }
+        return name;
+    }
+
+    function selectOnly(comp, layers) {
+        try {
+            var sel = comp.selectedLayers;
+            for (var i = 0; i < sel.length; i++) sel[i].selected = false;
+            for (i = 0; i < layers.length; i++) layers[i].selected = true;
+        } catch (e) {}
+    }
+
+    function colorFromInt(c) {
+        return [((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255];
+    }
+
+    function colorToInt(rgb) {
+        return (Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255);
+    }
+
+    // ---------- criar camadas ----------
+
+    function createLayerOfKind(kind) {
+        var comp = activeCompOrAlert();
+        if (!comp) return null;
+
+        var sel = comp.selectedLayers;
+        var ref = sel.length ? sel[0] : null;
+        var w = comp.width;
+        var h = comp.height;
+        var center = [w / 2, h / 2];
+        var layer = null;
+
+        var solidColor = null;
+        if (kind === "solid") {
+            var last = parseInt(loadSetting("lastSolidColor", String(colorToInt([0.73, 0.60, 0.98]))), 10);
+            var picked = -1;
+            try { picked = $.colorPicker(last); } catch (eCp) { picked = last; }
+            if (picked < 0) return null; // cancelou
+            saveSetting("lastSolidColor", picked);
+            solidColor = colorFromInt(picked);
+        }
+
+        app.beginUndoGroup("Mesmo Tools - Criar camada");
+
+        try {
+            if (kind === "text") {
+                layer = comp.layers.addText("Texto");
+                layer.name = uniqueLayerName(comp, "Texto");
+            } else if (kind === "adjustment") {
+                layer = comp.layers.addSolid([1, 1, 1], uniqueLayerName(comp, "Adjustment Layer"),
+                    w, h, comp.pixelAspect, comp.duration);
+                layer.adjustmentLayer = true;
+            } else if (kind === "nullLayer") {
+                layer = comp.layers.addNull(comp.duration);
+                layer.name = uniqueLayerName(comp, "Null");
+            } else if (kind === "solid") {
+                layer = comp.layers.addSolid(solidColor, uniqueLayerName(comp, "Sólido"),
+                    w, h, comp.pixelAspect, comp.duration);
+            } else if (kind === "shape") {
+                layer = comp.layers.addShape();
+                layer.name = uniqueLayerName(comp, "Shape");
+            } else if (kind === "camera") {
+                layer = comp.layers.addCamera(uniqueLayerName(comp, "Câmera"), center);
+            } else if (kind === "light") {
+                layer = comp.layers.addLight(uniqueLayerName(comp, "Luz"), center);
+                try { layer.lightType = LightType.POINT; } catch (eLt) {}
+            }
+
+            // Como o After: a camada nova entra logo acima da selecionada.
+            if (layer && ref) {
+                try { layer.moveBefore(ref); } catch (eMv) {}
+            }
+            if (layer) selectOnly(comp, [layer]);
+        } finally {
+            app.endUndoGroup();
+        }
+
+        return layer;
+    }
+
+    // ---------- null no atributo ----------
+
+    function hasAncestorMatch(prop, matchName) {
+        var p = prop.parentProperty;
+        while (p) {
+            if (p.matchName === matchName) return true;
+            p = p.parentProperty;
+        }
+        return false;
+    }
+
+    // Position da camada ou ponto de efeito (2D/3D espacial).
+    function nullTargetKind(p) {
+        try {
+            if (p.propertyType !== PropertyType.PROPERTY) return null;
+
+            var vt = p.propertyValueType;
+            if (vt !== PropertyValueType.TwoD_SPATIAL && vt !== PropertyValueType.ThreeD_SPATIAL) return null;
+
+            if (p.matchName === "ADBE Position") return "position";
+            if (hasAncestorMatch(p, "ADBE Effect Parade")) return "effectPoint";
+        } catch (e) {}
+        return null;
+    }
+
+    function exprLayerRef(name) {
+        return "thisComp.layer(\"" + String(name).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\")";
+    }
+
+    function arrayLiteral(v) {
+        var parts = [];
+        for (var i = 0; i < v.length; i++) parts.push(String(v[i]));
+        return "[" + parts.join(", ") + "]";
+    }
+
+    // Converte um valor do atributo para coordenada da comp no tempo t,
+    // usando o próprio After (expressão temporária no null).
+    function worldPointAt(nullLayer, srcLayer, kind, value, t, keep3D) {
+        var pos = nullLayer.property("ADBE Transform Group").property("ADBE Position");
+        var L = "thisComp.layer(" + srcLayer.index + ")";
+        var v = arrayLiteral(value);
+        var expr = kind === "position"
+            ? "var L = " + L + "; var r = L.hasParent ? L.parent.toComp(" + v + ") : " + v + ";"
+            : "var r = " + L + ".toComp(" + v + ");";
+
+        expr += keep3D ? " [r[0], r[1], (r.length > 2 ? r[2] : 0)]" : " [r[0], r[1]]";
+
+        pos.expression = expr;
+        var out = pos.valueAtTime(t, false);
+        pos.expression = "";
+        return out;
+    }
+
+    function createNullForProperty(p) {
+        var kind = nullTargetKind(p);
+        if (!kind) return {error: "não é Position nem ponto de efeito"};
+
+        var layer = p.propertyGroup(p.propertyDepth);
+        var comp = layer.containingComp;
+        var t = comp.time;
+        var is3D = false;
+        try { is3D = layer.threeDLayer; } catch (e3) {}
+
+        var dims = p.value.length;
+        var propLabel = String(p.name).toLowerCase().replace(/\s+/g, "-");
+
+        var nul = comp.layers.addNull(comp.duration);
+        nul.name = uniqueLayerName(comp, layer.name + "-" + propLabel + "-null");
+        if (is3D) nul.threeDLayer = true;
+        try { nul.label = 9; } catch (eLb) {}
+
+        try { nul.moveBefore(layer); } catch (eMv) {}
+
+        var npos = nul.property("ADBE Transform Group").property("ADBE Position");
+
+        // Leva a animação junto: cada keyframe vira keyframe do null.
+        if (p.numKeys > 0) {
+            var times = [];
+            var values = [];
+            var k;
+
+            for (k = 1; k <= p.numKeys; k++) {
+                times.push(p.keyTime(k));
+                values.push(worldPointAt(nul, layer, kind, p.keyValue(k), p.keyTime(k), is3D));
+            }
+
+            npos.setValuesAtTimes(times, values);
+
+            for (k = 1; k <= p.numKeys; k++) {
+                try {
+                    npos.setInterpolationTypeAtKey(k, p.keyInInterpolationType(k), p.keyOutInterpolationType(k));
+                    npos.setTemporalEaseAtKey(k, p.keyInTemporalEase(k), p.keyOutTemporalEase(k));
+                } catch (eEase) {}
+            }
+        } else {
+            npos.setValue(worldPointAt(nul, layer, kind, p.valueAtTime(t, false), t, is3D));
+        }
+
+        var trim = dims > 2 ? "r" : "[r[0], r[1]]";
+        var link = kind === "position"
+            ? "// Linkado ao null " + nul.name + " (Mesmo Tools)\n" +
+              "var n = " + exprLayerRef(nul.name) + ";\n" +
+              "var p = n.toComp(n.anchorPoint);\n" +
+              "var r = hasParent ? parent.fromComp(p) : p;\n" + trim + ";"
+            : "// Linkado ao null " + nul.name + " (Mesmo Tools)\n" +
+              "var n = " + exprLayerRef(nul.name) + ";\n" +
+              "var r = fromComp(n.toComp(n.anchorPoint));\n" + trim + ";";
+
+        p.expression = link;
+
+        return {nullLayer: nul, error: null};
+    }
+
+    // Propriedades selecionadas na comp ativa (sem repetir).
+    function selectedPropertiesOf(comp) {
+        var out = [];
+
+        function add(p) {
+            for (var i = 0; i < out.length; i++) if (out[i] === p) return;
+            out.push(p);
+        }
+
+        try {
+            var cp = comp.selectedProperties;
+            for (var i = 0; i < cp.length; i++) add(cp[i]);
+        } catch (e1) {}
+
+        try {
+            var ls = comp.selectedLayers;
+            for (var j = 0; j < ls.length; j++) {
+                var lp = ls[j].selectedProperties;
+                for (var k = 0; k < lp.length; k++) add(lp[k]);
+            }
+        } catch (e2) {}
+
+        return out;
+    }
+
+    // ---------- anchor point ----------
+
+    function offsetScalarProperty(prop, delta) {
+        try {
+            if (prop.numKeys > 0) {
+                for (var i = 1; i <= prop.numKeys; i++) prop.setValueAtKey(i, prop.keyValue(i) + delta);
+            } else {
+                prop.setValue(prop.value + delta);
+            }
+        } catch (e) {}
+    }
+
+    /*
+        Move o anchor para um ponto do retângulo da camada (fx, fy de 0 a 1)
+        sem mexer onde a camada aparece: a Position é compensada usando a
+        escala e a rotação no tempo atual.
+    */
+    function setAnchorToRect(layer, fx, fy, t) {
+        if (layer instanceof CameraLayer || layer instanceof LightLayer) return false;
+
+        var r;
+        try { r = layer.sourceRectAtTime(t, false); } catch (eR) { return false; }
+        if (!r) return false;
+
+        var tg = layer.property("ADBE Transform Group");
+        var ap = tg.property("ADBE Anchor Point");
+        var cur = ap.valueAtTime(t, false);
+        var d = [r.left + r.width * fx - cur[0], r.top + r.height * fy - cur[1]];
+
+        if (Math.abs(d[0]) < 1e-4 && Math.abs(d[1]) < 1e-4) return true;
+
+        var sc = tg.property("ADBE Scale").valueAtTime(t, false);
+        var rot = 0;
+        try { rot = tg.property("ADBE Rotate Z").valueAtTime(t, false); } catch (eRot) {}
+
+        var sx = d[0] * sc[0] / 100;
+        var sy = d[1] * sc[1] / 100;
+        var a = rot * Math.PI / 180;
+        var pd = [sx * Math.cos(a) - sy * Math.sin(a), sx * Math.sin(a) + sy * Math.cos(a)];
+
+        offsetArrayProperty(ap, [d[0], d[1], 0]);
+
+        var pos = tg.property("ADBE Position");
+        if (pos.dimensionsSeparated) {
+            offsetScalarProperty(tg.property("ADBE Position_0"), pd[0]);
+            offsetScalarProperty(tg.property("ADBE Position_1"), pd[1]);
+        } else {
+            offsetArrayProperty(pos, [pd[0], pd[1], 0]);
+        }
+
+        return true;
+    }
+
+    // ---------- extract ----------
+
+    function extractShapeGroups(layer, deleteOriginal, centerAnchor) {
+        if (!(layer instanceof ShapeLayer)) return {pieces: 0, reason: "não é shape layer"};
+
+        var comp = layer.containingComp;
+        var contents = layer.property("ADBE Root Vectors Group");
+        var groups = [];
+        var i;
+
+        for (i = 1; i <= contents.numProperties; i++) {
+            if (contents.property(i).matchName === "ADBE Vector Group") {
+                groups.push({index: i, name: contents.property(i).name});
+            }
+        }
+
+        if (groups.length < 2) return {pieces: 0, reason: "tem menos de 2 grupos"};
+
+        var created = [];
+
+        // Cada cópia nasce logo acima da original: a ordem final fica igual à dos grupos.
+        for (var g = 0; g < groups.length; g++) {
+            var dup = layer.duplicate();
+            var c = dup.property("ADBE Root Vectors Group");
+
+            // remove os OUTROS grupos; fills/strokes soltos no topo continuam valendo
+            for (var k = c.numProperties; k >= 1; k--) {
+                if (k !== groups[g].index && c.property(k).matchName === "ADBE Vector Group") {
+                    c.property(k).remove();
+                }
+            }
+
+            dup.name = uniqueLayerName(comp, layer.name + " - " + groups[g].name);
+            dup.enabled = true;
+
+            if (centerAnchor) setAnchorToRect(dup, 0.5, 0.5, comp.time);
+
+            created.push(dup);
+        }
+
+        if (deleteOriginal) layer.remove();
+        else layer.enabled = false;
+
+        selectOnly(comp, created);
+        return {pieces: created.length, reason: null};
+    }
+
+    // ---------- batidas ----------
+
+    function findAmplitudeSlider(ampLayer) {
+        var fx = ampLayer.property("ADBE Effect Parade");
+        var names = ["Both Channels", "Ambos os canais"];
+        for (var i = 0; i < names.length; i++) {
+            var e = fx.property(names[i]);
+            if (e) return e.property(1);
+        }
+        // fallback: primeiro slider do layer
+        if (fx.numProperties > 0) return fx.property(1).property(1);
+        return null;
+    }
+
+    /*
+        Detecta onsets: picos locais que passam da média ao redor (k vezes)
+        e de um piso de 12% do máximo, respeitando um intervalo mínimo.
+        values: amplitude por frame. Devolve índices dos frames com batida.
+    */
+    function detectBeatFrames(values, fps, sensitivity, minGapFrames) {
+        var n = values.length;
+        var out = [];
+        if (n < 3) return out;
+
+        var vmax = 0;
+        var i;
+        for (i = 0; i < n; i++) if (values[i] > vmax) vmax = values[i];
+        if (vmax <= 0) return out;
+
+        var k = 2.0 - (Math.max(1, Math.min(10, sensitivity)) - 1) * 0.1; // 1 → 2.0 ... 10 → 1.1
+        var floor = vmax * 0.12;
+        var win = Math.max(2, Math.round(fps * 0.4));
+        var last = -1e9;
+
+        for (i = 0; i < n; i++) {
+            var v = values[i];
+            var prev = i > 0 ? values[i - 1] : -1;
+            var next = i < n - 1 ? values[i + 1] : -1;
+
+            if (v < floor) continue;
+            if (!(v >= prev && v > next)) continue; // pico local
+
+            var a = Math.max(0, i - win);
+            var b = Math.min(n - 1, i + win);
+            var sum = 0;
+            for (var j = a; j <= b; j++) sum += values[j];
+            var mean = sum / (b - a + 1);
+
+            if (v >= mean * k && i - last >= minGapFrames) {
+                out.push(i);
+                last = i;
+            }
+        }
+
+        return out;
+    }
+
+    function markBeats(layer, opts) {
+        var comp = layer.containingComp;
+        var keepSel = comp.selectedLayers;
+
+        selectOnly(comp, [layer]);
+        try { comp.openInViewer(); } catch (eV) {}
+
+        var cmd = 0;
+        try { cmd = app.findMenuCommandId("Convert Audio to Keyframes"); } catch (eC) {}
+        if (!cmd) {
+            try { cmd = app.findMenuCommandId("Converter áudio em quadros-chave"); } catch (eC2) {}
+        }
+        if (!cmd) throw new Error("Não achei o comando \"Convert Audio to Keyframes\" do After.");
+
+        var before = comp.numLayers;
+        app.executeCommand(cmd);
+
+        if (comp.numLayers <= before) throw new Error("O After não criou a camada Audio Amplitude.");
+
+        var amp = comp.layer(1);
+        var slider = findAmplitudeSlider(amp);
+        var values = [];
+        var times = [];
+
+        if (slider) {
+            for (var k = 1; k <= slider.numKeys; k++) {
+                values.push(slider.keyValue(k));
+                times.push(slider.keyTime(k));
+            }
+        }
+
+        // limpa a camada temporária e o sólido dela
+        var src = null;
+        try { src = amp.source; } catch (eS) {}
+        amp.remove();
+        try { if (src && src.usedIn.length === 0) src.remove(); } catch (eSr) {}
+
+        selectOnly(comp, keepSel);
+
+        var frames = detectBeatFrames(values, comp.frameRate, opts.sensitivity, opts.minGap);
+        var markers = layer.property("ADBE Marker");
+
+        if (opts.clear) {
+            while (markers.numKeys > 0) markers.removeKey(1);
+        }
+
+        for (var f = 0; f < frames.length; f++) {
+            var mv = new MarkerValue(opts.numbered ? String(f + 1) : "");
+            markers.setValueAtTime(times[frames[f]], mv);
+        }
+
+        return frames.length;
+    }
+
+    // ---------- abas ----------
+
+    function buildCreateTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 6;
+        tab.margins = [0, 6, 0, 0];
+
+        var KINDS = [
+            [{k: "text", label: "Texto"}, {k: "adjustment", label: "Adjust."}, {k: "nullLayer", label: "Null"}, {k: "solid", label: "Sólido"}],
+            [{k: "shape", label: "Shape"}, {k: "camera", label: "Câmera"}, {k: "light", label: "Luz"}]
+        ];
+        var TIPS = {
+            text: "Camada de texto",
+            adjustment: "Adjustment Layer do tamanho da comp",
+            nullLayer: "Null Object",
+            solid: "Sólido do tamanho da comp (escolha a cor)",
+            shape: "Shape Layer vazia",
+            camera: "Câmera centralizada",
+            light: "Luz (Point) centralizada"
+        };
+
+        var status;
+
+        for (var r = 0; r < KINDS.length; r++) {
+            var row = tab.add("group");
+            row.orientation = "row";
+            row.alignChildren = ["fill", "center"];
+            row.spacing = 4;
+
+            for (var c = 0; c < 4; c++) {
+                var item = KINDS[r][c];
+                if (!item) {
+                    // espaço vazio para manter a grade
+                    var spacer = row.add("group");
+                    spacer.preferredSize = [30, 26];
+                    spacer.alignment = ["fill", "center"];
+                    continue;
+                }
+
+                var b = uiButton(row, item.label, {height: 26, tip: TIPS[item.k]});
+                uiFlex(b, 30);
+                b.mesmoKind = item.k;
+                b.onClick = function () {
+                    var layer = createLayerOfKind(this.mesmoKind);
+                    if (layer) status.text = "Criada: " + layer.name;
+                };
+            }
+        }
+
+        var btnNull = uiButton(tab, "NULL NO ATRIBUTO", {
+            primary: true,
+            tip: "Selecione a Position (ou um ponto de efeito) de uma ou mais camadas: cria um null no ponto exato e linka o atributo nele."
+        });
+
+        status = addStatus(tab, "Clique para criar na comp aberta.");
+
+        btnNull.onClick = function () {
+            var comp = activeCompOrAlert();
+            if (!comp) return;
+
+            var props = selectedPropertiesOf(comp);
+            var targets = [];
+            for (var i = 0; i < props.length; i++) if (nullTargetKind(props[i])) targets.push(props[i]);
+
+            if (targets.length === 0) {
+                alert(
+                    "Selecione a Position de uma camada (clique no nome \"Position\" na timeline) " +
+                    "ou um ponto de efeito.\n\nCom as dimensões separadas, junte X e Y antes."
+                );
+                return;
+            }
+
+            var made = [];
+            var errors = [];
+
+            app.beginUndoGroup("Mesmo Tools - Null no atributo");
+            try {
+                for (i = 0; i < targets.length; i++) {
+                    try {
+                        var res = createNullForProperty(targets[i]);
+                        if (res.error) errors.push(targets[i].name + ": " + res.error);
+                        else made.push(res.nullLayer);
+                    } catch (e) {
+                        errors.push(targets[i].name + ": " + e.toString().replace("Error: ", ""));
+                    }
+                }
+                if (made.length) selectOnly(comp, made);
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text = made.length === 1
+                ? "Null criado: " + made[0].name
+                : made.length + " null(s) criado(s).";
+
+            if (errors.length) alert("Alguns atributos falharam:\n\n" + errors.join("\n"));
+        };
+    }
+
+    function buildAnchorTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 6;
+        tab.margins = [0, 6, 0, 0];
+
+        var CELL = 28;
+        var NAMES = [
+            ["Topo esquerdo", "Topo", "Topo direito"],
+            ["Esquerda", "Centro", "Direita"],
+            ["Base esquerda", "Base", "Base direita"]
+        ];
+
+        var row0 = tab.add("group");
+        row0.orientation = "row";
+        row0.alignChildren = ["left", "top"];
+        row0.spacing = 10;
+
+        var gridBox = row0.add("group");
+        gridBox.orientation = "column";
+        gridBox.alignChildren = ["left", "top"];
+        gridBox.spacing = 3;
+
+        var status;
+
+        // Célula: quadrado lilás com a marquinha do ponto (quina, borda ou centro).
+        function drawCell(state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var fx = this.mesmoFx;
+            var fy = this.mesmoFy;
+            var fill = state.leftButtonPressed ? THEME.accentDown : (state.mouseOver ? THEME.accentHover : THEME.accent);
+            var mark = [1, 1, 1, 0.85];
+            var m = 4;   // margem da marca
+            var L = 8;   // tamanho da perna do "L"
+            var s = 3;   // espessura
+
+            uiRoundRect(g, 0, 0, w, h, 3);
+            g.fillPath(uiBrush(g, fill));
+
+            var brush = uiBrush(g, mark);
+
+            if (fx === 0.5 && fy === 0.5) {
+                g.newPath();
+                g.rectPath(w / 2 - 6, h / 2 - 6, 12, 12);
+                g.strokePath(uiPen(g, mark, 2.5));
+                return;
+            }
+
+            var x = fx === 0 ? m : (fx === 1 ? w - m : w / 2);
+            var y = fy === 0 ? m : (fy === 1 ? h - m : h / 2);
+
+            g.newPath();
+            if (fx !== 0.5 && fy !== 0.5) {
+                // quina: L apontando para o canto
+                var dx = fx === 0 ? 1 : -1;
+                var dy = fy === 0 ? 1 : -1;
+                g.rectPath(Math.min(x, x + dx * L), Math.min(y, y + dy * s), L, s);
+                g.rectPath(Math.min(x, x + dx * s), Math.min(y, y + dy * L), s, L);
+            } else if (fx === 0.5) {
+                // borda de cima/baixo: barra horizontal
+                g.rectPath(w / 2 - L / 2 - 2, fy === 0 ? m : h - m - s, L + 4, s);
+            } else {
+                // borda esquerda/direita: barra vertical
+                g.rectPath(fx === 0 ? m : w - m - s, h / 2 - L / 2 - 2, s, L + 4);
+            }
+            g.fillPath(brush);
+        }
+
+        function onCell() {
+            var comp = activeCompOrAlert();
+            if (!comp) return;
+
+            var layers = comp.selectedLayers;
+            if (layers.length === 0) {
+                alert("Selecione uma ou mais camadas.");
+                return;
+            }
+
+            var ok = 0;
+            app.beginUndoGroup("Mesmo Tools - Anchor Point");
+            try {
+                for (var i = 0; i < layers.length; i++) {
+                    try { if (setAnchorToRect(layers[i], this.mesmoFx, this.mesmoFy, comp.time)) ok++; } catch (e) {}
+                }
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text = "Anchor em \"" + this.mesmoName + "\" em " + ok + " camada(s).";
+        }
+
+        for (var r = 0; r < 3; r++) {
+            var row = gridBox.add("group");
+            row.orientation = "row";
+            row.spacing = 3;
+
+            for (var c = 0; c < 3; c++) {
+                var cell = row.add("button", undefined, "");
+                cell.preferredSize = [CELL, CELL];
+                cell.mesmoFx = c / 2;
+                cell.mesmoFy = r / 2;
+                cell.mesmoName = NAMES[r][c];
+                cell.helpTip = "Anchor Point: " + NAMES[r][c];
+                cell.onDraw = drawCell;
+                cell.onClick = onCell;
+            }
+        }
+
+        var help = uiFlex(row0.add("statictext", undefined,
+            "Move o Anchor Point para a quina, borda ou centro da camada sem tirá-la do lugar.",
+            {multiline: true}), 60);
+        help.alignment = ["fill", "fill"];
+        uiColorText(help, THEME.textDim);
+
+        status = addStatus(tab, "Selecione camadas e clique num ponto.");
+    }
+
+    function buildExtractTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 6;
+        tab.margins = [0, 6, 0, 0];
+
+        var info = uiFlex(uiLabel(tab, "Separa cada grupo da shape layer em uma camada."), 60);
+        info.helpTip = "Cada grupo do Contents vira uma camada própria, na mesma posição.";
+
+        var cbCenter = uiFlex(tab.add("checkbox", undefined, "Centralizar o anchor de cada peça"));
+        cbCenter.value = loadSetting("extractCenter", "1") === "1";
+
+        var cbDelete = uiFlex(tab.add("checkbox", undefined, "Apagar a original (senão só esconde)"));
+        cbDelete.value = loadSetting("extractDelete", "0") === "1";
+
+        var btn = uiButton(tab, "EXTRAIR FORMAS", {primary: true});
+        var status = addStatus(tab, "Selecione shape layers com 2 ou mais grupos.");
+
+        btn.onClick = function () {
+            var comp = activeCompOrAlert();
+            if (!comp) return;
+
+            var layers = comp.selectedLayers;
+            if (layers.length === 0) {
+                alert("Selecione uma ou mais shape layers.");
+                return;
+            }
+
+            saveSetting("extractCenter", cbCenter.value ? "1" : "0");
+            saveSetting("extractDelete", cbDelete.value ? "1" : "0");
+
+            var total = 0;
+            var skipped = [];
+
+            app.beginUndoGroup("Mesmo Tools - Extract");
+            try {
+                // copia a lista: a seleção muda durante o processo
+                var list = [];
+                for (var i = 0; i < layers.length; i++) list.push(layers[i]);
+
+                for (i = 0; i < list.length; i++) {
+                    var name = list[i].name;
+                    try {
+                        var res = extractShapeGroups(list[i], cbDelete.value, cbCenter.value);
+                        if (res.pieces) total += res.pieces;
+                        else skipped.push(name + " (" + res.reason + ")");
+                    } catch (e) {
+                        skipped.push(name + " (" + e.toString().replace("Error: ", "") + ")");
+                    }
+                }
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text = total + " camada(s) criada(s)" + (skipped.length ? " | " + skipped.length + " ignorada(s)" : "") + ".";
+            if (skipped.length && total === 0) alert("Nada para extrair:\n\n" + skipped.join("\n"));
+        };
+    }
+
+    function buildBeatsTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 6;
+        tab.margins = [0, 6, 0, 0];
+
+        var sensRow = tab.add("group");
+        sensRow.orientation = "row";
+        sensRow.alignChildren = ["fill", "center"];
+
+        uiLabel(sensRow, "Sensibilidade:");
+        var sens = sensRow.add("slider", undefined, parseFloat(loadSetting("beatSens", "5")), 1, 10);
+        sens.alignment = ["fill", "center"];
+        sens.preferredSize.width = 60;
+        sens.helpTip = "Mais alto = mais batidas (pega as mais fracas também)";
+        var sensVal = uiLabel(sensRow, "");
+        sensVal.preferredSize.width = 22;
+
+        var gapRow = tab.add("group");
+        gapRow.orientation = "row";
+        gapRow.alignChildren = ["left", "center"];
+
+        uiLabel(gapRow, "Intervalo mínimo:");
+        var txtGap = gapRow.add("edittext", undefined, loadSetting("beatGap", "6"));
+        txtGap.characters = 4;
+        uiLabel(gapRow, "frames");
+
+        var cbClear = uiFlex(tab.add("checkbox", undefined, "Apagar os marcadores antigos da camada"));
+        cbClear.value = loadSetting("beatClear", "1") === "1";
+
+        var cbNumber = uiFlex(tab.add("checkbox", undefined, "Numerar os marcadores (1, 2, 3...)"));
+        cbNumber.value = loadSetting("beatNumber", "0") === "1";
+
+        var btn = uiButton(tab, "MARCAR BATIDAS", {primary: true});
+        var status = addStatus(tab, "Selecione uma camada com áudio.");
+
+        function syncSens() {
+            sens.value = Math.round(sens.value);
+            sensVal.text = String(sens.value);
+        }
+
+        sens.onChanging = syncSens;
+        syncSens();
+
+        btn.onClick = function () {
+            var comp = activeCompOrAlert();
+            if (!comp) return;
+
+            var layers = comp.selectedLayers;
+            if (layers.length !== 1) {
+                alert("Selecione uma camada de áudio (só uma).");
+                return;
+            }
+
+            var layer = layers[0];
+            var hasAudio = false;
+            try { hasAudio = layer.hasAudio; } catch (eA) {}
+            if (!hasAudio) {
+                alert("A camada \"" + layer.name + "\" não tem áudio.");
+                return;
+            }
+
+            var gap = parseInt(txtGap.text, 10);
+            if (isNaN(gap) || gap < 1) gap = 1;
+
+            saveSetting("beatSens", sens.value);
+            saveSetting("beatGap", gap);
+            saveSetting("beatClear", cbClear.value ? "1" : "0");
+            saveSetting("beatNumber", cbNumber.value ? "1" : "0");
+
+            status.text = "Analisando o áudio...";
+
+            var count = 0;
+            app.beginUndoGroup("Mesmo Tools - Marcar batidas");
+            try {
+                count = markBeats(layer, {
+                    sensitivity: sens.value,
+                    minGap: gap,
+                    clear: cbClear.value,
+                    numbered: cbNumber.value
+                });
+            } catch (e) {
+                status.text = "Não foi possível analisar.";
+                alert(e.toString().replace("Error: ", ""));
+                return;
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text = count + " batida(s) marcada(s) em \"" + layer.name + "\".";
+        };
+    }
+
     function buildUI(thisObj) {
         var win = (thisObj instanceof Panel)
             ? thisObj
@@ -4791,6 +5625,15 @@
                 tools: [
                     {label: "Curvas", build: buildCurvesTab, width: 330},
                     {label: "Explode", build: buildExplodeTab, width: 290}
+                ]
+            },
+            {
+                label: "Camadas", abbr: "Lyr", tip: "Criar camadas, null no atributo, anchor point, extract e batidas",
+                tools: [
+                    {label: "Criar", build: buildCreateTab, width: 260},
+                    {label: "Anchor Point", build: buildAnchorTab, width: 240},
+                    {label: "Extract", build: buildExtractTab, width: 250},
+                    {label: "Batidas", build: buildBeatsTab, width: 260}
                 ]
             },
             {

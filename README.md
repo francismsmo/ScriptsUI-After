@@ -2,9 +2,10 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-O painel tem 3 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
+O painel tem 4 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
 
 - **Animação** = Curvas + Explode
+- **Camadas** = Criar + Anchor Point + Extract + Batidas
 - **Comps** = Ajustes + Duplicar + 3D / Blur
 - **Expressões**
 
@@ -17,6 +18,10 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 | Ferramenta | O que faz |
 |---|---|
 | **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e editor **ao vivo**, por valor ou por speed graph: escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
+| **Criar** | Botões para criar Texto, Adjustment Layer, Null, Sólido (com seletor de cor), Shape, Câmera e Luz na comp aberta, logo acima da camada selecionada. **Null no atributo:** selecione a Position (ou um ponto de efeito) e ele cria um null exatamente naquele ponto, leva a animação junto e linka o atributo ao null. O nome segue `NomeDaCamada-position-null`. |
+| **Anchor Point** | Grade 3×3: move o Anchor Point para uma quina, borda ou o centro das camadas selecionadas sem tirá-las do lugar. |
+| **Extract** | Separa cada grupo de uma shape layer em uma camada própria, na mesma posição e ordem. Fills e strokes soltos no topo vão junto em cada peça. Pode centralizar o anchor de cada peça e apagar ou só esconder a original. |
+| **Batidas** | Analisa o áudio da camada selecionada e cria um marcador em cada batida. Tem ajuste de sensibilidade, intervalo mínimo entre marcadores, opção de apagar os marcadores antigos e de numerar. |
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
@@ -63,6 +68,12 @@ Vêm do repositório [After-effects-Expressions](https://github.com/francismsmo/
 
 - Quando a expressão usa um `Slider Control` na própria camada, o painel cria o efeito sozinho se ele não existir (dá para desligar).
 - Os atalhos não podem ser apagados. Se você editar um e salvar, ele vira uma cópia sua em ★ Minhas.
+
+## Camadas: detalhes
+
+- **Null no atributo** funciona na Position da camada (com ou sem parent, 2D ou 3D) e em pontos de efeito. Com as dimensões da Position separadas, junte X e Y antes. Se o atributo tiver keyframes, eles são copiados para o null (com os eases), e o atributo passa a seguir o null por expressão.
+- **Anchor Point** usa o tamanho da camada no tempo atual. A compensação da posição considera escala e rotação; em camadas 3D com rotação em X/Y ou Orientation, o resultado pode deslocar um pouco.
+- **Batidas** usa o comando *Convert Audio to Keyframes* do próprio After para ler o volume, encontra os picos e depois apaga a camada temporária. Sensibilidade baixa pega só as batidas fortes; alta pega também as fracas. O intervalo mínimo evita marcadores grudados.
 
 ## Duplicar com pastas
 
