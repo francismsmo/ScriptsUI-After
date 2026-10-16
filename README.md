@@ -9,7 +9,7 @@ Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelera
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
 | **3D** | Liga ou desliga o switch 3D em todas as camadas das comps selecionadas, opcionalmente entrando nas precomps e em camadas bloqueadas. |
-| **Expressões** | Biblioteca de expressões favoritas: salvar, buscar, capturar de uma propriedade e aplicar nas propriedades selecionadas (duplo clique aplica direto). |
+| **Expressões** | 18 atalhos prontos (delay, wiggle, texto, contadores, caixa reativa, 3D…), cada um com descrição, onde aplicar e tutorial em comentário. Também guarda suas próprias expressões (★ Minhas): salvar, buscar, capturar de uma propriedade e aplicar (duplo clique aplica direto). |
 
 ## Instalação
 
@@ -34,6 +34,23 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 
 Funciona em propriedades numéricas (posição, escala, rotação, opacidade, cor, efeitos…). Paths de máscara/shape e Source Text não são suportados.
 Em **Position** com caminho espacial, curvas que passam do limite (tipo *Back*) não ultrapassam o ponto final. Para esse efeito, use **Separate Dimensions**.
+
+## Atalhos de expressões
+
+Vêm do repositório [After-effects-Expressions](https://github.com/francismsmo/After-effects-Expressions). Todo atalho abre com um bloco de comentário explicando **o que faz**, **onde aplicar**, **como usar** passo a passo e os cuidados. O comentário vai junto para a propriedade, então dá para reler o tutorial direto no After.
+
+| Categoria | Atalhos |
+|---|---|
+| Delay | Delay do Control — Position / Rotation / Scale |
+| Wiggle | Wiggle crescente, crescente com limite, diminuindo, em loop, na escala proporcional |
+| Texto | Revelar texto letra por letra, Encadear APOIO depois do PRINCIPAL |
+| Números | Contador 2 dígitos, Contador 6 dígitos (000.000), Timecode de câmera |
+| Layout | Caixa reativa (Anchor Point do texto + Size da caixa), Tamanho por sliders |
+| 3D | Escala constante pela câmera |
+| Movimento | Desacelerar até parar |
+
+- Quando a expressão usa um `Slider Control` na própria camada, o painel cria o efeito sozinho se ele não existir (dá para desligar).
+- Os atalhos não podem ser apagados. Se você editar um e salvar, ele vira uma cópia sua em ★ Minhas.
 
 ## Duplicar com pastas
 
