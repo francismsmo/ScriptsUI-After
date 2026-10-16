@@ -16,7 +16,7 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 
 | Ferramenta | O que faz |
 |---|---|
-| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e editor **ao vivo**: escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
+| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e editor **ao vivo**, por valor ou por speed graph: escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
@@ -38,7 +38,8 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 
 - **Selecione as keyframes** (duas ou mais vizinhas, em uma ou várias propriedades) e mexa no editor: a timeline atualiza na hora. Com uma keyframe só, a curva vai no trecho até a próxima.
 - **Dropdown:** escolher uma curva já aplica.
-- **Alças:** arraste para ajustar ao vivo; Shift arredonda os valores.
+- **Alças:** arraste para ajustar ao vivo; Shift arredonda os valores. Se o mouse sair do editor, a alça é solta ali.
+- **Gráfico Valor / Velocidade:** *Valor* mostra a curva bezier; *Velocidade* mostra o speed graph, como no Graph Editor do After. Nele, cada alça é a influência (para os lados) e a velocidade da keyframe (para cima e para baixo). A linha tracejada é a velocidade média do trecho (1×).
 - **Salvar / ★ / Excluir:** guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown) ou apaga.
 - **Aplicar ao vivo:** desmarque se quiser só desenhar a curva sem mexer nas keys.
 - Cada atualização entra no Undo; enquanto você arrasta, o After registra alguns passos por segundo.

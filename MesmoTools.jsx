@@ -26,6 +26,10 @@
       lado a lado no painel largo, empilhadas no estreito (botão ⇆ força
       um modo); cada ferramenta recolhe/expande pelo cabeçalho;
       editor de curva quadrado e compacto.
+    - Curvas: modo Velocidade (speed graph) no editor; arrastar para fora
+      do editor solta a alça; campos acompanham a largura do painel.
+    - Desempenho: recolher/expandir e trocar de aba recalculam só a aba
+      ativa; medidas de texto em cache; resize mais leve.
     - Barra de rolagem: o painel pode ficar pequeno e o conteúdo rola
       (cabeçalho e abas fixos); cada aba rola só o próprio conteúdo.
     - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
@@ -91,6 +95,7 @@
     function addStatus(parent, text) {
         var status = parent.add("statictext", undefined, text || "");
         status.alignment = ["fill", "top"];
+        status.preferredSize.width = 40;
         uiColorText(status, THEME.textDim);
         return status;
     }
@@ -160,7 +165,7 @@
             [x + r, y + h - r, 90],
             [x + r, y + r, 180]
         ];
-        var steps = 4;
+        var steps = 2;
         var first = true;
 
         for (var c = 0; c < corners.length; c++) {
@@ -181,12 +186,33 @@
         g.closePath();
     }
 
+    // Medir texto é caro no ScriptUI: guarda o resultado por fonte + texto.
+    var MEASURE_CACHE = {};
+    var MEASURE_COUNT = 0;
+
+    function uiMeasure(g, s, font) {
+        var key = (font ? (font.name + font.size + font.style) : "") + "|" + s;
+        var hit = MEASURE_CACHE[key];
+        if (hit) return hit;
+
+        var m = g.measureString(s, font);
+        hit = [m[0], m[1]];
+
+        if (MEASURE_COUNT > 2000) {
+            MEASURE_CACHE = {};
+            MEASURE_COUNT = 0;
+        }
+        MEASURE_CACHE[key] = hit;
+        MEASURE_COUNT++;
+        return hit;
+    }
+
     function uiFit(g, s, font, maxW) {
         s = String(s);
         if (maxW <= 0) return "";
-        if (g.measureString(s, font)[0] <= maxW) return s;
+        if (uiMeasure(g, s, font)[0] <= maxW) return s;
 
-        while (s.length > 1 && g.measureString(s + "…", font)[0] > maxW) {
+        while (s.length > 1 && uiMeasure(g, s + "…", font)[0] > maxW) {
             s = s.substring(0, s.length - 1);
         }
 
@@ -194,7 +220,7 @@
     }
 
     function uiText(g, s, font, color, x, y, w, h, align) {
-        var sz = g.measureString(s, font);
+        var sz = uiMeasure(g, s, font);
         var tx = x + (w - sz[0]) / 2;
 
         if (align === "left") tx = x;
@@ -220,6 +246,18 @@
             );
         } catch (e) {}
         return st;
+    }
+
+    /*
+        Deixa o elemento encolher/esticar com o painel: sem largura mínima
+        vinda do texto, ele ocupa o espaço que sobrar na linha.
+    */
+    function uiFlex(el, minW) {
+        try {
+            el.preferredSize.width = minW || 40;
+            el.alignment = ["fill", el.alignment && el.alignment[1] ? el.alignment[1] : "center"];
+        } catch (e) {}
+        return el;
     }
 
     function uiLabel(parent, text) {
@@ -300,7 +338,7 @@
             var w = this.size[0];
             var h = this.size[1];
             var font = uiFont("BOLD", 10);
-            var sz = g.measureString(this.mesmoTitle, font);
+            var sz = uiMeasure(g, this.mesmoTitle, font);
 
             g.newPath();
             g.rectPath(0, Math.round((h - 9) / 2), 3, 9);
@@ -389,12 +427,12 @@
             uiStrokeCurve(g, logoCurve, 4, ly + 4, 12, 12, [0, 1], THEME.textOnAccent, 2);
 
             var s1 = "MESMO";
-            var sz1 = g.measureString(s1, fBold);
+            var sz1 = uiMeasure(g, s1, fBold);
             g.drawString(s1, uiPen(g, THEME.text), 28, (h - sz1[1]) / 2, fBold);
             g.drawString("TOOLS", uiPen(g, THEME.accent), 28 + sz1[0] + 4, (h - sz1[1]) / 2, fReg);
 
             var v = "v" + SCRIPT_VERSION;
-            var sv = g.measureString(v, fSmall);
+            var sv = uiMeasure(g, v, fSmall);
             g.drawString(v, uiPen(g, THEME.textDim), w - sv[0] - 2, (h - sv[1]) / 2, fSmall);
         };
 
@@ -446,7 +484,7 @@
 
                 var font = uiFont(active ? "BOLD" : "REGULAR", 11);
                 var s = this.text;
-                if (g.measureString(s, font)[0] > w - 8) s = this.mesmoShort;
+                if (uiMeasure(g, s, font)[0] > w - 8) s = this.mesmoShort;
 
                 uiText(
                     g,
@@ -685,8 +723,7 @@
         header.orientation = "row";
         header.alignChildren = ["fill", "center"];
 
-        var selectionText = header.add("statictext", undefined, "Selecione comps no Project.");
-        selectionText.alignment = ["fill", "center"];
+        var selectionText = uiFlex(header.add("statictext", undefined, "Selecione comps no Project."));
 
         var btnLoad = uiButton(header, "Ler 1ª Comp", {tip: "Carrega os valores da primeira comp selecionada"});
 
@@ -817,8 +854,8 @@
 
         uiLabel(durationRow, "Tempo:");
         var txtDuration = durationRow.add("edittext", undefined, "0:00:10:00");
-        txtDuration.characters = 12;
-        uiLabel(durationRow, "H:MM:SS:FF | 10s | 250f");
+        uiFlex(txtDuration);
+        uiLabel(durationRow, "ou 10s / 250f").helpTip = "Timecode H:MM:SS:FF, segundos (10s) ou frames (250f)";
 
         var rendererPanel = uiSection(tab, "Renderer 3D");
         rendererPanel.orientation = "column";
@@ -1069,18 +1106,18 @@
         ddType.selection = 0;
 
         var txtSfx = grpSfx.add("edittext", undefined, "_Copy");
-        txtSfx.characters = 16;
+        uiFlex(txtSfx);
 
         var grpSrch = pnlNaming.add("group");
         var cbSrch = grpSrch.add("checkbox", undefined, "Buscar");
 
         var txtSrch = grpSrch.add("edittext", undefined, "");
-        txtSrch.characters = 10;
+        uiFlex(txtSrch);
 
         uiLabel(grpSrch, "trocar por");
 
         var txtRpl = grpSrch.add("edittext", undefined, "");
-        txtRpl.characters = 10;
+        uiFlex(txtRpl);
 
         var pnlOpts = uiSection(tab, "Opções");
         pnlOpts.orientation = "column";
@@ -1093,7 +1130,7 @@
         var cbFolder = folderRow.add("checkbox", undefined, "Organizar na pasta");
         var txtFolderName = folderRow.add("edittext", undefined, "");
         txtFolderName.alignment = ["fill", "center"];
-        txtFolderName.characters = 12;
+        uiFlex(txtFolderName);
         txtFolderName.helpTip = "Vazio = usa o sufixo sem o \"_\" (ex.: _v02 vira v02)";
 
         var cbPrecompFolder = pnlOpts.add(
@@ -1101,9 +1138,9 @@
             undefined,
             "Separar as precomps numa subpasta PRECOMPS"
         );
+        uiFlex(cbPrecompFolder);
 
-        var previewText = uiLabel(pnlOpts, "");
-        previewText.alignment = ["fill", "top"];
+        var previewText = uiFlex(uiLabel(pnlOpts, ""));
 
         var cbExp = pnlOpts.add("checkbox", undefined, "Atualizar expressões");
 
@@ -1181,6 +1218,8 @@
                 previewText.text =
                     "Resultado:  [" + resolvedFolderName() + "]  →  " + compName + " + precomps";
             }
+
+            previewText.helpTip = previewText.text; // texto completo ao passar o mouse
         }
 
         cbFolder.onClick = refreshDupUI;
@@ -2132,7 +2171,7 @@
         var customLabel = customGroup.add("statictext", undefined, "Valor:");
 
         var txtCustom = customGroup.add("edittext", undefined, "");
-        txtCustom.characters = 24;
+        uiFlex(txtCustom);
         txtCustom.alignment = ["fill", "center"];
 
         var optionsPanel = uiSection(tab, "Opções");
@@ -2238,11 +2277,8 @@
         tab.spacing = 8;
         tab.margins = [0, 6, 0, 0];
 
-        var info = uiLabel(
-            tab,
-            "Age nas comps selecionadas no Project (ou na comp aberta, se nada estiver selecionado)."
-        );
-        info.alignment = ["fill", "top"];
+        var info = uiFlex(uiLabel(tab, "Comps selecionadas no Project (ou a comp aberta)."));
+        info.helpTip = "Se nada estiver selecionado no Project, age na comp que está aberta.";
 
         var optionsPanel = uiSection(tab, "Opções");
         optionsPanel.orientation = "column";
@@ -2270,8 +2306,9 @@
         var compMBCheckbox = secMB.add(
             "checkbox",
             undefined,
-            "Ligar também a chave de Motion Blur das comps"
+            "Ligar a chave de Motion Blur da comp"
         );
+        uiFlex(compMBCheckbox);
         compMBCheckbox.value = loadSetting("mbCompSwitch", "1") === "1";
         compMBCheckbox.helpTip =
             "Sem a chave da comp ligada, o blur das camadas não aparece no preview nem no render.";
@@ -4158,25 +4195,29 @@
             r.orientation = "row";
             r.alignChildren = ["fill", "center"];
             var l = uiLabel(r, label);
-            l.preferredSize.width = 62;
+            l.preferredSize.width = 58;
             return r;
         }
 
-        var txtValues = sideRow("Bezier:").add("edittext", undefined, "");
-        txtValues.alignment = ["fill", "center"];
+        // Modo do gráfico: Valor (curva bezier) ou Velocidade (speed graph do AE)
+        var modeRow = sideRow("Gráfico:");
+        modeRow.spacing = 2;
+        var btnModeValue = uiButton(modeRow, "Valor", {tip: "Curva de valor (como o Value Graph)"});
+        var btnModeSpeed = uiButton(modeRow, "Velocidade", {tip: "Curva de velocidade (como o Speed Graph): alças = influência e speed"});
+        uiFlex(btnModeValue, 30);
+        uiFlex(btnModeSpeed, 30);
+
+        var txtValues = uiFlex(sideRow("Bezier:").add("edittext", undefined, ""));
         txtValues.helpTip = "x1, y1, x2, y2 — pode colar do cubic-bezier.com. Enter aplica.";
 
-        var infoText = uiLabel(edSide, "");
-        infoText.alignment = ["fill", "top"];
-        infoText.helpTip = "Influência das keyframes: quanto da curva cada alça puxa.";
+        var infoText = uiFlex(uiLabel(edSide, ""));
+        infoText.helpTip = "Influência (%) e velocidade (× a velocidade média do trecho) de cada keyframe.";
 
         var txtName = sideRow("Nome:").add("edittext", undefined, "");
-        txtName.alignment = ["fill", "center"];
-        txtName.characters = 12;
+        uiFlex(txtName);
 
         var txtCat = sideRow("Categoria:").add("edittext", undefined, "Minhas");
-        txtCat.alignment = ["fill", "center"];
-        txtCat.characters = 12;
+        uiFlex(txtCat);
         txtCat.helpTip = "Digite uma categoria existente ou crie uma nova";
 
         var manageRow = edSide.add("group");
@@ -4187,12 +4228,14 @@
         var btnSave = uiButton(manageRow, "Salvar", {tip: "Salva na biblioteca (atualiza se o nome já existir)"});
         var btnDelete = uiButton(manageRow, "Excluir");
 
-        var cbLive = tab.add("checkbox", undefined, "Aplicar ao vivo nas keyframes selecionadas");
+        var cbLive = uiFlex(tab.add("checkbox", undefined, "Ao vivo nas keyframes selecionadas"));
         cbLive.value = loadSetting("curvesLive", "1") === "1";
 
         var status = addStatus(tab, "Selecione keyframes e mexa no editor.");
 
         // ----- desenho do editor -----
+
+        lib.mode = loadSetting("curvesGraph", "value") === "speed" ? "speed" : "value";
 
         function edBox() {
             var w = editor.size[0];
@@ -4200,74 +4243,180 @@
             return {x: ED_PAD, y: ED_PAD, w: w - ED_PAD * 2, h: h - ED_PAD * 2};
         }
 
+        // Velocidades relativas à velocidade média do trecho (1 = média).
+        function speedsOf(c) {
+            var x1 = Math.max(0.001, c.x1);
+            var x2 = Math.min(0.999, c.x2);
+            return {s1: c.y1 / x1, s2: (1 - c.y2) / (1 - x2)};
+        }
+
+        // Velocidade ao longo do tempo: pontos [x, v] amostrados da bezier.
+        function speedSamples(c) {
+            var out = [];
+            for (var i = 0; i <= 40; i++) {
+                var t = i / 40;
+                var mt = 1 - t;
+                var dx = 3 * mt * mt * c.x1 + 6 * mt * t * (c.x2 - c.x1) + 3 * t * t * (1 - c.x2);
+                var dy = 3 * mt * mt * c.y1 + 6 * mt * t * (c.y2 - c.y1) + 3 * t * t * (1 - c.y2);
+                if (Math.abs(dx) < 1e-6) continue;
+                out.push([bezierPoint(c, t)[0], dy / dx]);
+            }
+            return out;
+        }
+
+        function speedRangeOf(c) {
+            var sp = speedsOf(c);
+            var lo = Math.min(0, sp.s1, sp.s2);
+            var hi = Math.max(2, sp.s1, sp.s2);
+            var smp = speedSamples(c);
+            for (var i = 0; i < smp.length; i++) {
+                if (smp[i][1] < lo) lo = smp[i][1];
+                if (smp[i][1] > hi) hi = smp[i][1];
+            }
+            var pad = (hi - lo) * 0.12;
+            return [lo - pad, hi + pad];
+        }
+
+        // Faixa vertical: fixa no modo Valor; no modo Velocidade acompanha a
+        // curva, mas fica congelada durante o arraste (senão a alça "foge").
+        function yRange() {
+            if (lib.mode !== "speed") return ED_RANGE;
+            if (!lib.frozenRange) lib.speedRange = speedRangeOf(lib.edit);
+            return lib.speedRange;
+        }
+
         function edX(v, b) { return b.x + v * b.w; }
-        function edY(v, b) { return b.y + b.h - (v - ED_RANGE[0]) / (ED_RANGE[1] - ED_RANGE[0]) * b.h; }
+        function edY(v, b) { var r = yRange(); return b.y + b.h - (v - r[0]) / (r[1] - r[0]) * b.h; }
         function edInvX(px, b) { return (px - b.x) / b.w; }
-        function edInvY(py, b) { return ED_RANGE[0] + (b.y + b.h - py) / b.h * (ED_RANGE[1] - ED_RANGE[0]); }
+        function edInvY(py, b) { var r = yRange(); return r[0] + (b.y + b.h - py) / b.h * (r[1] - r[0]); }
+
+        // Onde estão as duas alças (em pixels) no modo atual.
+        function handlePoints(b) {
+            var e = lib.edit;
+            if (lib.mode === "speed") {
+                var sp = speedsOf(e);
+                return [[edX(e.x1, b), edY(sp.s1, b)], [edX(e.x2, b), edY(sp.s2, b)]];
+            }
+            return [[edX(e.x1, b), edY(e.y1, b)], [edX(e.x2, b), edY(e.y2, b)]];
+        }
 
         var drag = 0;
+
+        function drawFrame(g, b, w, h) {
+            uiRoundRect(g, 0, 0, w, h, 5);
+            g.fillPath(uiBrush(g, THEME.well));
+
+            g.newPath();
+            g.rectPath(b.x, b.y, b.w, b.h);
+            g.fillPath(uiBrush(g, THEME.grid));
+
+            g.newPath();
+            for (var i = 1; i < 4; i++) {
+                var gx = Math.round(edX(i / 4, b)) + 0.5;
+                g.moveTo(gx, b.y);
+                g.lineTo(gx, b.y + b.h);
+            }
+            g.strokePath(uiPen(g, THEME.surface, 1));
+        }
+
+        function drawHandles(g, pts, anchors) {
+            var i;
+
+            g.newPath();
+            for (i = 0; i < 2; i++) {
+                g.moveTo(anchors[i][0], anchors[i][1]);
+                g.lineTo(pts[i][0], pts[i][1]);
+            }
+            g.strokePath(uiPen(g, THEME.textDim, 1));
+
+            for (i = 0; i < 2; i++) {
+                g.newPath();
+                g.rectPath(anchors[i][0] - 3, anchors[i][1] - 3, 6, 6);
+                g.fillPath(uiBrush(g, THEME.text));
+            }
+
+            for (i = 0; i < 2; i++) {
+                g.newPath();
+                g.ellipsePath(pts[i][0] - 5, pts[i][1] - 5, 10, 10);
+                g.fillPath(uiBrush(g, drag === i + 1 ? THEME.accent : THEME.text));
+                g.newPath();
+                g.ellipsePath(pts[i][0] - 5, pts[i][1] - 5, 10, 10);
+                g.strokePath(uiPen(g, THEME.well, 2));
+            }
+        }
 
         editor.onDraw = function () {
             var g = this.graphics;
             var b = edBox();
             var e = lib.edit;
+            var pts = handlePoints(b);
             var i;
 
-            uiRoundRect(g, 0, 0, this.size[0], this.size[1], 5);
-            g.fillPath(uiBrush(g, THEME.well));
+            drawFrame(g, b, this.size[0], this.size[1]);
 
-            var top = edY(1, b);
-            var bottom = edY(0, b);
+            if (lib.mode === "speed") {
+                var sp = speedsOf(e);
+                var y0 = Math.round(edY(0, b)) + 0.5;
+                var yAvg = Math.round(edY(1, b)) + 0.5;
 
-            g.newPath();
-            g.rectPath(edX(0, b), top, b.w, bottom - top);
-            g.fillPath(uiBrush(g, THEME.grid));
-
-            g.newPath();
-            for (i = 1; i < 4; i++) {
-                var gx = Math.round(edX(i / 4, b)) + 0.5;
-                g.moveTo(gx, top);
-                g.lineTo(gx, bottom);
-                var gy = Math.round(edY(i / 4, b)) + 0.5;
-                g.moveTo(edX(0, b), gy);
-                g.lineTo(edX(1, b), gy);
-            }
-            g.strokePath(uiPen(g, THEME.surface, 1));
-
-            g.newPath();
-            g.moveTo(edX(0, b), bottom);
-            g.lineTo(edX(1, b), top);
-            g.strokePath(uiPen(g, THEME.line, 1));
-
-            var h1 = [edX(e.x1, b), edY(e.y1, b)];
-            var h2 = [edX(e.x2, b), edY(e.y2, b)];
-
-            g.newPath();
-            g.moveTo(edX(0, b), bottom);
-            g.lineTo(h1[0], h1[1]);
-            g.moveTo(edX(1, b), top);
-            g.lineTo(h2[0], h2[1]);
-            g.strokePath(uiPen(g, THEME.textDim, 1));
-
-            uiStrokeCurve(g, e, b.x, b.y, b.w, b.h, ED_RANGE, THEME.accent, 2.5);
-
-            var ends = [[edX(0, b), bottom], [edX(1, b), top]];
-            for (i = 0; i < 2; i++) {
+                // linha de velocidade zero e da velocidade média
                 g.newPath();
-                g.rectPath(ends[i][0] - 3, ends[i][1] - 3, 6, 6);
-                g.fillPath(uiBrush(g, THEME.text));
-            }
+                g.moveTo(b.x, y0);
+                g.lineTo(b.x + b.w, y0);
+                g.strokePath(uiPen(g, THEME.line, 1));
 
-            var hs = [h1, h2];
-            for (i = 0; i < 2; i++) {
                 g.newPath();
-                g.ellipsePath(hs[i][0] - 5, hs[i][1] - 5, 10, 10);
-                g.fillPath(uiBrush(g, drag === i + 1 ? THEME.accent : THEME.text));
+                for (i = 0; i < b.w; i += 6) {
+                    g.moveTo(b.x + i, yAvg);
+                    g.lineTo(b.x + Math.min(i + 3, b.w), yAvg);
+                }
+                g.strokePath(uiPen(g, THEME.surfaceHover, 1));
+
+                var smp = speedSamples(e);
                 g.newPath();
-                g.ellipsePath(hs[i][0] - 5, hs[i][1] - 5, 10, 10);
-                g.strokePath(uiPen(g, THEME.well, 2));
+                for (i = 0; i < smp.length; i++) {
+                    var px = edX(smp[i][0], b);
+                    var py = edY(smp[i][1], b);
+                    if (i === 0) g.moveTo(px, py);
+                    else g.lineTo(px, py);
+                }
+                g.strokePath(uiPen(g, THEME.accent, 2.5));
+
+                drawHandles(g, pts, [[edX(0, b), edY(sp.s1, b)], [edX(1, b), edY(sp.s2, b)]]);
+            } else {
+                var top = edY(1, b);
+                var bottom = edY(0, b);
+
+                g.newPath();
+                g.moveTo(b.x, Math.round(bottom) + 0.5);
+                g.lineTo(b.x + b.w, Math.round(bottom) + 0.5);
+                g.moveTo(b.x, Math.round(top) + 0.5);
+                g.lineTo(b.x + b.w, Math.round(top) + 0.5);
+                g.strokePath(uiPen(g, THEME.surface, 1));
+
+                g.newPath();
+                g.moveTo(edX(0, b), bottom);
+                g.lineTo(edX(1, b), top);
+                g.strokePath(uiPen(g, THEME.line, 1));
+
+                uiStrokeCurve(g, e, b.x, b.y, b.w, b.h, ED_RANGE, THEME.accent, 2.5);
+
+                drawHandles(g, pts, [[edX(0, b), bottom], [edX(1, b), top]]);
             }
         };
+
+        function setMode(m) {
+            lib.mode = m;
+            saveSetting("curvesGraph", m);
+            btnModeValue.mesmoPrimary = m === "value";
+            btnModeSpeed.mesmoPrimary = m === "speed";
+            uiRedraw(btnModeValue);
+            uiRedraw(btnModeSpeed);
+            uiRedraw(editor);
+        }
+
+        btnModeValue.onClick = function () { setMode("value"); };
+        btnModeSpeed.onClick = function () { setMode("speed"); };
 
         // ----- aplicar ao vivo -----
 
@@ -4353,12 +4502,14 @@
 
         editor.addEventListener("mousedown", function (ev) {
             var b = edBox();
-            var e = lib.edit;
-            var d1 = Math.sqrt(Math.pow(ev.clientX - edX(e.x1, b), 2) + Math.pow(ev.clientY - edY(e.y1, b), 2));
-            var d2 = Math.sqrt(Math.pow(ev.clientX - edX(e.x2, b), 2) + Math.pow(ev.clientY - edY(e.y2, b), 2));
+            var pts = handlePoints(b);
+            var d1 = Math.sqrt(Math.pow(ev.clientX - pts[0][0], 2) + Math.pow(ev.clientY - pts[0][1], 2));
+            var d2 = Math.sqrt(Math.pow(ev.clientX - pts[1][0], 2) + Math.pow(ev.clientY - pts[1][1], 2));
 
             drag = Math.min(d1, d2) <= 12 ? (d1 <= d2 ? 1 : 2) : 0;
             if (!drag) return;
+
+            lib.frozenRange = true; // escala do gráfico parada enquanto arrasta
 
             // Pega as keyframes uma vez, no começo do arraste.
             live.segments = null;
@@ -4378,20 +4529,32 @@
             if (!drag) return;
 
             var b = edBox();
+            var r = yRange();
             var vx = Math.max(0, Math.min(1, edInvX(ev.clientX, b)));
-            var vy = Math.max(ED_RANGE[0], Math.min(ED_RANGE[1], edInvY(ev.clientY, b)));
+            var vy = Math.max(r[0], Math.min(r[1], edInvY(ev.clientY, b)));
 
             if (ev.shiftKey) {
                 vx = Math.round(vx * 20) / 20;
-                vy = Math.round(vy * 20) / 20;
+                vy = Math.round(vy * (lib.mode === "speed" ? 4 : 20)) / (lib.mode === "speed" ? 4 : 20);
             }
 
-            if (drag === 1) {
-                lib.edit.x1 = round3(vx);
-                lib.edit.y1 = round3(vy);
+            var e = lib.edit;
+
+            if (lib.mode === "speed") {
+                // alça = (influência, velocidade), como no Speed Graph do AE
+                if (drag === 1) {
+                    e.x1 = round3(Math.max(0.01, vx));
+                    e.y1 = round3(vy * e.x1);
+                } else {
+                    e.x2 = round3(Math.min(0.99, vx));
+                    e.y2 = round3(1 - vy * (1 - e.x2));
+                }
+            } else if (drag === 1) {
+                e.x1 = round3(vx);
+                e.y1 = round3(vy);
             } else {
-                lib.edit.x2 = round3(vx);
-                lib.edit.y2 = round3(vy);
+                e.x2 = round3(vx);
+                e.y2 = round3(vy);
             }
 
             lib.selected = null;
@@ -4407,6 +4570,7 @@
         function endDrag() {
             if (!drag) return;
             drag = 0;
+            lib.frozenRange = false;
 
             if (live.segments) applyLive(); // posição final exata
             else liveStatus(null, 0);
@@ -4417,6 +4581,18 @@
 
         editor.addEventListener("mouseup", endDrag);
         tab.addEventListener("mouseup", endDrag);
+
+        // Saiu da área do editor segurando o clique: solta a alça ali mesmo.
+        // (Confere a posição: o redesenho do editor também dispara "mouseout",
+        // mas com o mouse ainda dentro, e esse caso é ignorado.)
+        editor.addEventListener("mouseout", function (ev) {
+            if (!drag) return;
+            var w = editor.size[0];
+            var h = editor.size[1];
+            var x = ev.clientX;
+            var y = ev.clientY;
+            if (x <= 0 || y <= 0 || x >= w - 1 || y >= h - 1) endDrag();
+        });
 
         // ----- biblioteca -----
 
@@ -4474,9 +4650,10 @@
         function syncEditorFields() {
             var e = lib.edit;
             txtValues.text = curveValuesText(e);
+            var sp = speedsOf(e);
             infoText.text =
-                "Saída " + Math.round(e.x1 * 100) +
-                "%  ·  entrada " + Math.round((1 - e.x2) * 100) + "%";
+                "Saída " + Math.round(e.x1 * 100) + "% · " + (Math.round(sp.s1 * 10) / 10) + "×   " +
+                "Entrada " + Math.round((1 - e.x2) * 100) + "% · " + (Math.round(sp.s2 * 10) / 10) + "×";
         }
 
         function loadIntoEditor(c) {
@@ -4590,6 +4767,7 @@
 
         refreshDropdown();
         loadIntoEditor(null);
+        setMode(lib.mode);
 
     }
 
@@ -4733,14 +4911,37 @@
 
         var relaying = false;
 
+        // Recalcular a janela inteira é lento (centenas de controles, todas
+        // as abas). Aqui só a aba ativa é recalculada e encaixada na área.
+        function fitActivePage() {
+            var p = pages[activeGroup];
+            p.layout.layout(true);
+
+            var w = viewport.size[0];
+            var h = p.preferredSize[1];
+
+            stack.preferredSize = [-1, h];
+            content.preferredSize = [-1, h + 6];
+
+            content.size = [w, h + 6];
+            stack.size = [w, h];
+            p.size = [w, h];
+            p.layout.resize();
+        }
+
         function relayout() {
             if (relaying) return;
             relaying = true;
             try {
                 applyResponsive();
-                win.layout.layout(true);
-                win.layout.resize();
-            } catch (e) {}
+                fitActivePage();
+            } catch (e) {
+                // plano B: recalcula tudo
+                try {
+                    win.layout.layout(true);
+                    win.layout.resize();
+                } catch (e2) {}
+            }
             updateScroll();
             relaying = false;
         }
@@ -4759,10 +4960,11 @@
             saveSetting("lastGroup", idx);
             try { groupViews[idx].refresh(); } catch (e) {}
 
-            // cada aba começa do topo
+            // cada aba começa do topo, já encaixada
             activeGroup = idx;
             try { scrollbar.value = 0; } catch (eS) {}
-            updateScroll();
+            if (started) relayout();
+            else updateScroll();
         });
 
         var LAYOUT_LABELS = {auto: "Auto", wide: "Lado a lado", stacked: "Empilhado"};
@@ -4830,6 +5032,7 @@
         }
 
         var activeGroup = startGroup;
+        var started = false;
 
         // Altura real da aba ativa (as outras abas do stack não contam).
         function contentHeight() {
@@ -4880,11 +5083,25 @@
 
         updateScroll();
 
+        started = true;
+
+        var lastWidth = -1;
+
+        // Durante o resize: só reposiciona e atualiza a rolagem (leve).
+        // Lado a lado/empilhado só é reavaliado quando a largura muda.
         win.onResizing =
         win.onResize = function () {
-            if (applyResponsive()) {
-                try { this.layout.layout(true); } catch (e) {}
+            var w = 0;
+            try { w = this.size[0]; } catch (eW) {}
+
+            if (w !== lastWidth) {
+                lastWidth = w;
+                if (applyResponsive()) {
+                    relayout();
+                    return;
+                }
             }
+
             this.layout.resize();
             updateScroll();
         };
