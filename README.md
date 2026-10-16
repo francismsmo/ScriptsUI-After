@@ -2,13 +2,21 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-| Aba | O que faz |
+O painel tem 3 abas principais, com sub-abas dentro:
+
+- **Animação** → Curvas · Explode
+- **Comps** → Ajustes · Duplicar · 3D / Blur
+- **Expressões**
+
+As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é lilás).
+
+| Sub-aba | O que faz |
 |---|---|
-| **Curvas** | Biblioteca de curvas de velocidade. Salve suas curvas favoritas, organize por categoria, marque favoritas, edite arrastando as alças, capture a curva de keyframes que já existem e aplique com um clique. |
-| **Comps** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
+| **Curvas** | Biblioteca de curvas de velocidade em miniaturas quadradas (16 por página, a ponta lilás marca as favoritas). Salve suas curvas favoritas, organize por categoria, marque favoritas, edite arrastando as alças, capture a curva de keyframes que já existem e aplique com um clique. |
+| **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
-| **3D/Blur** | Liga ou desliga o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
+| **3D / Blur** | Liga ou desliga o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
 | **Expressões** | 18 atalhos prontos (delay, wiggle, texto, contadores, caixa reativa, 3D…), cada um com descrição, onde aplicar e tutorial em comentário. Também guarda suas próprias expressões (★ Minhas): salvar, buscar, capturar de uma propriedade e aplicar (duplo clique aplica direto). |
 
 ## Instalação
@@ -74,7 +82,7 @@ Com **Organizar na pasta** e **Separar as precomps** ligados, duplicar a comp `E
 - **Explode** funciona melhor no After Effects 24.3+, que preserva estilos por caractere. Texto justificado e vertical não são suportados.
 - Outros scripts e o KBar podem chamar `explodeMesmo({split: "words", deleteOriginal: true})` depois que o painel foi aberto uma vez.
 - Todas as ações entram num único Undo (Ctrl+Z desfaz a operação inteira).
-- O painel lembra a última aba aberta.
+- O painel lembra a última aba e sub-aba abertas.
 
 Os arquivos salvos ficam em `Folder.userData/MesmoTools/` (no Windows, `%APPDATA%\MesmoTools\`).
 

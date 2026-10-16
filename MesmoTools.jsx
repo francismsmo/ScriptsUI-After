@@ -3,12 +3,12 @@
     MESMO TOOLS - painel ScriptUI único para Adobe After Effects.
 
     Abas:
-    - Curvas: biblioteca de curvas de velocidade (salvar, organizar, aplicar)
-    - Comps: resolução, FPS, duração e renderer 3D em lote
-    - Duplicar: duplica comps com precomps independentes
-    - Explode: divide camadas de texto
-    - 3D/Blur: liga/desliga 3D e Motion Blur nas comps e precomps
-    - Expressões: biblioteca de expressões favoritas
+    - Animação > Curvas: biblioteca de curvas de velocidade
+    - Animação > Explode: divide camadas de texto
+    - Comps > Ajustes: resolução, FPS, duração e renderer 3D em lote
+    - Comps > Duplicar: duplica comps com precomps independentes
+    - Comps > 3D / Blur: liga/desliga 3D e Motion Blur nas comps e precomps
+    - Expressões: atalhos prontos + suas expressões favoritas
 
     Arquivos salvos em Folder.userData/MesmoTools/:
     - speed_curves.txt          (curvas)
@@ -23,6 +23,10 @@
       importar/exportar biblioteca.
     - Explode: recusa texto vertical/justificado (como o avulso fazia) e
       expõe explodeMesmo(options) para outros scripts.
+    - Visual: destaque lilás; 3 abas principais com sub-abas
+      (Animação: Curvas/Explode · Comps: Ajustes/Duplicar/3D-Blur ·
+      Expressões); miniaturas de curva quadradas e menores; editor de
+      curva quadrado e compacto.
     - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
       (e a chave da comp); usa a comp aberta se nada estiver selecionado.
     - Expressões: 18 atalhos do repositório After-effects-Expressions,
@@ -97,19 +101,19 @@
     // ================================================================
 
     var THEME = {
-        accent:       [1.00, 0.42, 0.24, 1],
-        accentHover:  [1.00, 0.54, 0.38, 1],
-        accentDown:   [0.84, 0.33, 0.17, 1],
-        accentSoft:   [1.00, 0.42, 0.24, 0.35],
-        text:         [0.90, 0.90, 0.90, 1],
-        textDim:      [0.58, 0.58, 0.58, 1],
-        textOnAccent: [0.09, 0.09, 0.09, 1],
-        surface:      [0.21, 0.21, 0.21, 1],
-        surfaceHover: [0.26, 0.26, 0.26, 1],
-        surfaceDown:  [0.16, 0.16, 0.16, 1],
-        well:         [0.13, 0.13, 0.13, 1],
-        line:         [0.31, 0.31, 0.31, 1],
-        grid:         [0.20, 0.20, 0.20, 1]
+        accent:       [0.73, 0.60, 0.98, 1],  // lilás #BA99FA
+        accentHover:  [0.82, 0.72, 1.00, 1],
+        accentDown:   [0.60, 0.47, 0.86, 1],
+        accentSoft:   [0.73, 0.60, 0.98, 0.25],
+        text:         [0.91, 0.90, 0.94, 1],
+        textDim:      [0.60, 0.58, 0.66, 1],
+        textOnAccent: [0.11, 0.08, 0.17, 1],
+        surface:      [0.22, 0.21, 0.25, 1],
+        surfaceHover: [0.28, 0.26, 0.32, 1],
+        surfaceDown:  [0.16, 0.15, 0.19, 1],
+        well:         [0.13, 0.12, 0.15, 1],
+        line:         [0.32, 0.30, 0.37, 1],
+        grid:         [0.19, 0.18, 0.22, 1]
     };
 
     var FONT_CACHE = {};
@@ -449,6 +453,77 @@
                     font,
                     (active || state.mouseOver) ? THEME.text : THEME.textDim,
                     0, 0, w, h - 3
+                );
+            };
+
+            b.onClick = function () {
+                nav.select(this.mesmoIndex);
+            };
+
+            nav.buttons.push(b);
+        }
+
+        nav.select = function (idx) {
+            nav.index = idx;
+            uiRedraw(row);
+            if (onSelect) onSelect(idx);
+        };
+
+        return nav;
+    }
+
+    /*
+        Sub-abas (controle segmentado) dentro de uma aba principal.
+        items: [{label, abbr}]
+    */
+    function uiSubNav(parent, items, onSelect) {
+        var row = parent.add("group");
+        row.orientation = "row";
+        row.alignment = ["fill", "top"];
+        row.alignChildren = ["fill", "fill"];
+        row.spacing = 0;
+        row.margins = 0;
+
+        var nav = {buttons: [], index: 0};
+        var count = items.length;
+
+        for (var i = 0; i < count; i++) {
+            var b = row.add("button", undefined, items[i].label);
+            b.mesmoAbbr = items[i].abbr || items[i].label;
+            b.mesmoIndex = i;
+            b.preferredSize = [30, 24];
+            b.helpTip = items[i].tip || items[i].label;
+
+            b.onDraw = function (state) {
+                var g = this.graphics;
+                var w = this.size[0];
+                var h = this.size[1];
+                var idx = this.mesmoIndex;
+                var active = nav.index === idx;
+
+                // trilho de fundo
+                g.newPath();
+                g.rectPath(0, 0, w, h);
+                g.fillPath(uiBrush(g, THEME.well));
+
+                if (active) {
+                    uiRoundRect(g, 2, 2, w - 4, h - 4, 3);
+                    g.fillPath(uiBrush(g, THEME.accent));
+                } else if (state.mouseOver) {
+                    uiRoundRect(g, 2, 2, w - 4, h - 4, 3);
+                    g.fillPath(uiBrush(g, THEME.surface));
+                }
+
+                var font = uiFont(active ? "BOLD" : "REGULAR", 11);
+                var s = this.text;
+                if (g.measureString(s, font)[0] > w - 10) s = this.mesmoAbbr;
+
+                uiText(
+                    g,
+                    uiFit(g, s, font, w - 6),
+                    font,
+                    active ? THEME.textOnAccent : (state.mouseOver ? THEME.text : THEME.textDim),
+                    0, 0, w, h
                 );
             };
 
@@ -4087,12 +4162,13 @@
         tab.spacing = 8;
         tab.margins = [0, 6, 0, 0];
 
-        var PER_PAGE = 12;
-        var COLS = 4;
+        var PER_PAGE = 16;
+        var COLS = 8;
+        var TILE = 34;
         var ALL = "Todas";
         var FAVS = "★ Favoritas";
         var ED_RANGE = [-0.6, 1.6];
-        var ED_PAD = 16;
+        var ED_PAD = 12;
 
         var curves = readCurveFile(getCurveStoreFile());
         if (!curves) {
@@ -4125,17 +4201,19 @@
         var grid = libSec.add("group");
         grid.orientation = "column";
         grid.alignChildren = ["fill", "top"];
-        grid.spacing = 4;
+        grid.spacing = 3;
+        grid.alignChildren = ["left", "top"];
 
         var slots = [];
 
+        // Miniatura quadrada: só a curva. Nome no tooltip e na linha de baixo.
         function drawThumb(state) {
             var g = this.graphics;
             var w = this.size[0];
             var h = this.size[1];
             var c = this.mesmoCurve;
 
-            uiRoundRect(g, 0, 0, w, h, 4);
+            uiRoundRect(g, 0, 0, w, h, 3);
 
             if (!c) {
                 g.fillPath(uiBrush(g, THEME.well));
@@ -4143,44 +4221,37 @@
             }
 
             var sel = lib.selected === c.name;
-            g.fillPath(uiBrush(g, state.mouseOver ? THEME.surfaceHover : THEME.surface));
+            g.fillPath(uiBrush(g, sel ? THEME.surfaceHover : (state.mouseOver ? THEME.surfaceHover : THEME.surface)));
 
             if (sel) {
-                uiRoundRect(g, 1, 1, w - 2, h - 2, 4);
-                g.strokePath(uiPen(g, THEME.accent, 2));
+                uiRoundRect(g, 0.5, 0.5, w - 1, h - 1, 3);
+                g.strokePath(uiPen(g, THEME.accent, 1.5));
             }
 
-            var pad = 9;
-            var gh = h - pad - 20;
-            var range = curveYRange(c);
-            var lo = range[0];
-            var span = range[1] - range[0];
-            var y0 = pad + gh - (0 - lo) / span * gh;
-            var y1 = pad + gh - (1 - lo) / span * gh;
+            var pad = 5;
+            uiStrokeCurve(g, c, pad, pad, w - pad * 2, h - pad * 2, curveYRange(c),
+                sel ? THEME.accent : THEME.text, 1.5);
 
-            g.newPath();
-            g.moveTo(pad, y0 + 0.5);
-            g.lineTo(w - pad, y0 + 0.5);
-            g.moveTo(pad, y1 + 0.5);
-            g.lineTo(w - pad, y1 + 0.5);
-            g.strokePath(uiPen(g, THEME.line, 1));
-
-            uiStrokeCurve(g, c, pad, pad, w - pad * 2, gh, range, sel ? THEME.accent : THEME.text, 2);
-
-            var font = uiFont("REGULAR", 9);
-            var label = (c.fav ? "★ " : "") + c.name;
-            uiText(g, uiFit(g, label, font, w - 6), font, sel ? THEME.text : THEME.textDim, 3, h - 18, w - 6, 16);
+            // favorita: cantinho lilás
+            if (c.fav) {
+                g.newPath();
+                g.moveTo(w - 8, 0);
+                g.lineTo(w, 0);
+                g.lineTo(w, 8);
+                g.closePath();
+                g.fillPath(uiBrush(g, THEME.accent));
+            }
         }
 
         for (var r = 0; r < PER_PAGE / COLS; r++) {
             var row = grid.add("group");
             row.orientation = "row";
-            row.alignChildren = ["fill", "top"];
-            row.spacing = 4;
+            row.alignChildren = ["left", "top"];
+            row.spacing = 3;
 
             for (var cIdx = 0; cIdx < COLS; cIdx++) {
                 var slot = row.add("button", undefined, "");
-                slot.preferredSize = [56, 64];
+                slot.preferredSize = [TILE, TILE];
                 slot.mesmoCurve = null;
                 slot.onDraw = drawThumb;
                 slot.onClick = onThumbClick;
@@ -4201,9 +4272,20 @@
         // ----- Editor -----
         var edSec = uiSection(tab, "Editor");
 
-        var editor = edSec.add("group");
-        editor.alignment = ["fill", "top"];
-        editor.preferredSize = [200, 180];
+        var edRow = edSec.add("group");
+        edRow.orientation = "row";
+        edRow.alignChildren = ["left", "top"];
+        edRow.spacing = 8;
+
+        var editor = edRow.add("group");
+        editor.alignment = ["left", "top"];
+        editor.preferredSize = [128, 128];
+
+        var edSide = edRow.add("group");
+        edSide.orientation = "column";
+        edSide.alignment = ["fill", "top"];
+        edSide.alignChildren = ["fill", "top"];
+        edSide.spacing = 5;
         editor.helpTip = "Arraste as alças. Shift arredonda os valores.";
 
         function edBox() {
@@ -4261,7 +4343,7 @@
             g.lineTo(h2[0], h2[1]);
             g.strokePath(uiPen(g, THEME.textDim, 1));
 
-            uiStrokeCurve(g, e, b.x, b.y, b.w, b.h, ED_RANGE, THEME.accent, 3);
+            uiStrokeCurve(g, e, b.x, b.y, b.w, b.h, ED_RANGE, THEME.accent, 2.5);
 
             var ends = [[edX(0, b), bottom], [edX(1, b), top]];
             for (i = 0; i < 2; i++) {
@@ -4273,10 +4355,10 @@
             var hs = [h1, h2];
             for (i = 0; i < 2; i++) {
                 g.newPath();
-                g.ellipsePath(hs[i][0] - 6, hs[i][1] - 6, 12, 12);
+                g.ellipsePath(hs[i][0] - 5, hs[i][1] - 5, 10, 10);
                 g.fillPath(uiBrush(g, drag === i + 1 ? THEME.accent : THEME.text));
                 g.newPath();
-                g.ellipsePath(hs[i][0] - 6, hs[i][1] - 6, 12, 12);
+                g.ellipsePath(hs[i][0] - 5, hs[i][1] - 5, 10, 10);
                 g.strokePath(uiPen(g, THEME.well, 2));
             }
         };
@@ -4289,7 +4371,7 @@
             var d1 = Math.sqrt(Math.pow(ev.clientX - edX(e.x1, b), 2) + Math.pow(ev.clientY - edY(e.y1, b), 2));
             var d2 = Math.sqrt(Math.pow(ev.clientX - edX(e.x2, b), 2) + Math.pow(ev.clientY - edY(e.y2, b), 2));
 
-            drag = Math.min(d1, d2) <= 16 ? (d1 <= d2 ? 1 : 2) : 0;
+            drag = Math.min(d1, d2) <= 12 ? (d1 <= d2 ? 1 : 2) : 0;
             if (drag) uiRedraw(editor);
         });
 
@@ -4326,30 +4408,38 @@
         editor.addEventListener("mouseup", endDrag);
         tab.addEventListener("mouseup", endDrag);
 
-        var valRow = edSec.add("group");
+        var valRow = edSide.add("group");
         valRow.orientation = "row";
         valRow.alignChildren = ["fill", "center"];
 
-        uiLabel(valRow, "Bezier:");
+        var lblBez = uiLabel(valRow, "Bezier:");
+        lblBez.preferredSize.width = 62;
         var txtValues = valRow.add("edittext", undefined, "");
         txtValues.alignment = ["fill", "center"];
         txtValues.helpTip = "x1, y1, x2, y2 — pode colar direto do cubic-bezier.com";
 
-        var infoText = uiLabel(edSec, "");
+        var infoText = uiLabel(edSide, "");
         infoText.alignment = ["fill", "top"];
 
-        var nameRow = edSec.add("group");
+        var nameRow = edSide.add("group");
         nameRow.orientation = "row";
         nameRow.alignChildren = ["fill", "center"];
 
-        uiLabel(nameRow, "Nome:");
+        var lblName = uiLabel(nameRow, "Nome:");
+        lblName.preferredSize.width = 62;
         var txtName = nameRow.add("edittext", undefined, "");
         txtName.alignment = ["fill", "center"];
         txtName.characters = 12;
 
-        uiLabel(nameRow, "Categoria:");
-        var txtCat = nameRow.add("edittext", undefined, "Minhas");
-        txtCat.characters = 9;
+        var catRow = edSide.add("group");
+        catRow.orientation = "row";
+        catRow.alignChildren = ["fill", "center"];
+
+        var lblCat = uiLabel(catRow, "Categoria:");
+        lblCat.preferredSize.width = 62;
+        var txtCat = catRow.add("edittext", undefined, "Minhas");
+        txtCat.alignment = ["fill", "center"];
+        txtCat.characters = 12;
         txtCat.helpTip = "Digite uma categoria existente ou crie uma nova";
 
         var manageRow = edSec.add("group");
@@ -4453,9 +4543,9 @@
                 slots[i].helpTip = c ? (c.name + "  [" + c.cat + "]\n" + curveValuesText(c)) : "";
             }
 
-            pageText.text =
-                (lib.page + 1) + " / " + pages + "   ·   " +
-                list.length + (list.length === 1 ? " curva" : " curvas");
+            lib.pages = pages;
+            lib.count = list.length;
+            updatePagerText();
 
             btnPrev.enabled = lib.page > 0;
             btnNext.enabled = lib.page < pages - 1;
@@ -4465,12 +4555,20 @@
             uiRedraw(btnNext);
         }
 
+        function updatePagerText() {
+            pageText.text =
+                (lib.selected ? lib.selected + "   ·   " : "") +
+                (lib.page + 1) + "/" + (lib.pages || 1) + "   ·   " +
+                (lib.count || 0) + (lib.count === 1 ? " curva" : " curvas");
+        }
+
         function syncEditorFields() {
             var e = lib.edit;
             txtValues.text = curveValuesText(e);
             infoText.text =
-                "Influência  saída " + Math.round(e.x1 * 100) +
+                "Saída " + Math.round(e.x1 * 100) +
                 "%  ·  entrada " + Math.round((1 - e.x2) * 100) + "%";
+            infoText.helpTip = "Influência das keyframes: quanto da curva cada alça puxa.";
         }
 
         function loadIntoEditor(c) {
@@ -4482,6 +4580,7 @@
             txtName.text = lib.edit.name;
             txtCat.text = lib.edit.cat;
             syncEditorFields();
+            updatePagerText();
             uiRedraw(editor);
         }
 
@@ -4795,23 +4894,88 @@
 
         uiHeader(win);
 
-        var PAGES = [
-            {label: "Curvas", abbr: "Ease", tip: "Biblioteca de curvas de velocidade", build: buildCurvesTab},
-            {label: "Comps", abbr: "Comp", tip: "Resolução, FPS, duração e renderer", build: buildCompsTab},
-            {label: "Duplicar", abbr: "Dup", tip: "Duplicar comps com precomps independentes", build: buildDuplicaTab},
-            {label: "Explode", abbr: "Txt", tip: "Dividir camadas de texto", build: buildExplodeTab},
-            {label: "3D/Blur", abbr: "3D", tip: "Ligar/desligar 3D e Motion Blur em lote", build: build3DTab},
-            {label: "Expressões", abbr: "Expr", tip: "Biblioteca de expressões favoritas", build: buildExpressionsTab}
+        // Abas principais; cada uma pode ter sub-abas.
+        var GROUPS = [
+            {
+                label: "Animação", abbr: "Anim", tip: "Curvas de velocidade e Explode de texto",
+                subs: [
+                    {label: "Curvas", abbr: "Ease", build: buildCurvesTab},
+                    {label: "Explode", abbr: "Txt", build: buildExplodeTab}
+                ]
+            },
+            {
+                label: "Comps", abbr: "Comp", tip: "Ajustes de comp, Duplicar, 3D e Motion Blur",
+                subs: [
+                    {label: "Ajustes", abbr: "Ajst", build: buildCompsTab},
+                    {label: "Duplicar", abbr: "Dup", build: buildDuplicaTab},
+                    {label: "3D / Blur", abbr: "3D", build: build3DTab}
+                ]
+            },
+            {
+                label: "Expressões", abbr: "Expr", tip: "Atalhos de expressões e suas favoritas",
+                subs: [
+                    {label: "Expressões", build: buildExpressionsTab}
+                ]
+            }
         ];
+
+        function buildGroup(page, group, gIndex) {
+            page.orientation = "column";
+            page.alignChildren = ["fill", "top"];
+            page.spacing = 6;
+            page.margins = [0, 2, 0, 0];
+
+            var subPages = [];
+            var hooks = [];
+            var subNav = null;
+            var key = "lastSub" + gIndex;
+
+            function show(idx) {
+                for (var i = 0; i < subPages.length; i++) subPages[i].visible = (i === idx);
+                saveSetting(key, idx);
+                try { if (hooks[idx] && hooks[idx].refresh) hooks[idx].refresh(); } catch (e) {}
+            }
+
+            if (group.subs.length > 1) {
+                subNav = uiSubNav(page, group.subs, show);
+            }
+
+            var subStack = page.add("group");
+            subStack.orientation = "stack";
+            subStack.alignment = ["fill", "fill"];
+            subStack.alignChildren = ["fill", "top"];
+
+            for (var i = 0; i < group.subs.length; i++) {
+                var sp = subStack.add("group");
+                sp.alignment = ["fill", "fill"];
+                hooks.push(group.subs[i].build(sp) || null);
+                sp.visible = false;
+                subPages.push(sp);
+            }
+
+            var start = parseInt(loadSetting(key, "0"), 10);
+            if (isNaN(start) || start < 0 || start >= subPages.length) start = 0;
+
+            return {
+                start: function () {
+                    if (subNav) subNav.select(start);
+                    else show(start);
+                },
+                refresh: function () {
+                    var idx = subNav ? subNav.index : 0;
+                    try { if (hooks[idx] && hooks[idx].refresh) hooks[idx].refresh(); } catch (e) {}
+                }
+            };
+        }
 
         var stack;
         var pages = [];
-        var hooks = [];
+        var groupHooks = [];
 
-        var nav = uiNav(win, PAGES, function (idx) {
+        var nav = uiNav(win, GROUPS, function (idx) {
             for (var i = 0; i < pages.length; i++) pages[i].visible = (i === idx);
-            saveSetting("lastTab", idx);
-            try { if (hooks[idx] && hooks[idx].refresh) hooks[idx].refresh(); } catch (e) {}
+            saveSetting("lastGroup", idx);
+            try { groupHooks[idx].refresh(); } catch (e) {}
         });
 
         stack = win.add("group");
@@ -4819,19 +4983,21 @@
         stack.alignment = ["fill", "fill"];
         stack.alignChildren = ["fill", "top"];
 
-        for (var i = 0; i < PAGES.length; i++) {
+        for (var i = 0; i < GROUPS.length; i++) {
             var page = stack.add("group");
             page.alignment = ["fill", "fill"];
-            hooks.push(PAGES[i].build(page) || null);
+            groupHooks.push(buildGroup(page, GROUPS[i], i));
             page.visible = false;
             pages.push(page);
         }
 
-        var start = parseInt(loadSetting("lastTab", "0"), 10);
-        if (isNaN(start) || start < 0 || start >= PAGES.length) start = 0;
+        var startGroup = parseInt(loadSetting("lastGroup", "0"), 10);
+        if (isNaN(startGroup) || startGroup < 0 || startGroup >= GROUPS.length) startGroup = 0;
 
         win.layout.layout(true);
-        nav.select(start);
+
+        for (i = 0; i < groupHooks.length; i++) groupHooks[i].start();
+        nav.select(startGroup);
 
         win.onResizing =
         win.onResize = function () {
