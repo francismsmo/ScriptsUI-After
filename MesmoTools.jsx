@@ -7,7 +7,7 @@
     - Comps: resolução, FPS, duração e renderer 3D em lote
     - Duplicar: duplica comps com precomps independentes
     - Explode: divide camadas de texto
-    - 3D: liga/desliga 3D nas comps selecionadas e precomps
+    - 3D/Blur: liga/desliga 3D e Motion Blur nas comps e precomps
     - Expressões: biblioteca de expressões favoritas
 
     Arquivos salvos em Folder.userData/MesmoTools/:
@@ -23,6 +23,8 @@
       importar/exportar biblioteca.
     - Explode: recusa texto vertical/justificado (como o avulso fazia) e
       expõe explodeMesmo(options) para outros scripts.
+    - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
+      (e a chave da comp); usa a comp aberta se nada estiver selecionado.
     - Expressões: 18 atalhos do repositório After-effects-Expressions,
       com descrição, "Aplicar em" e tutorial em comentário; filtro por
       categoria; cria o Slider Control quando a expressão precisa.
@@ -2185,10 +2187,9 @@
         tab.spacing = 8;
         tab.margins = [0, 6, 0, 0];
 
-        var info = tab.add(
-            "statictext",
-            undefined,
-            "Aplica o switch 3D nas camadas das comps selecionadas no Project."
+        var info = uiLabel(
+            tab,
+            "Age nas comps selecionadas no Project (ou na comp aberta, se nada estiver selecionado)."
         );
         info.alignment = ["fill", "top"];
 
@@ -2196,39 +2197,102 @@
         optionsPanel.orientation = "column";
         optionsPanel.alignChildren = ["left", "top"];
 
-        var recursiveCheckbox = optionsPanel.add(
-            "checkbox",
-            undefined,
-            "Processar Precomps"
-        );
-        recursiveCheckbox.value = true;
+        var recursiveCheckbox = optionsPanel.add("checkbox", undefined, "Processar precomps");
+        recursiveCheckbox.value = loadSetting("layersRecursive", "1") === "1";
 
-        var lockedCheckbox = optionsPanel.add(
-            "checkbox",
-            undefined,
-            "Processar camadas bloqueadas"
-        );
-        lockedCheckbox.value = true;
+        var lockedCheckbox = optionsPanel.add("checkbox", undefined, "Processar camadas bloqueadas");
+        lockedCheckbox.value = loadSetting("layersLocked", "1") === "1";
 
-        var btns = tab.add("group");
+        // ----- 3D -----
+        var sec3D = uiSection(tab, "Camadas 3D");
+
+        var btns = sec3D.add("group");
         btns.orientation = "row";
         btns.alignChildren = ["fill", "center"];
 
         var make3DButton = uiButton(btns, "ATIVAR 3D", {primary: true});
         var disable3DButton = uiButton(btns, "DESATIVAR 3D", {height: 32});
 
+        // ----- Motion Blur -----
+        var secMB = uiSection(tab, "Motion Blur");
+
+        var compMBCheckbox = secMB.add(
+            "checkbox",
+            undefined,
+            "Ligar também a chave de Motion Blur das comps"
+        );
+        compMBCheckbox.value = loadSetting("mbCompSwitch", "1") === "1";
+        compMBCheckbox.helpTip =
+            "Sem a chave da comp ligada, o blur das camadas não aparece no preview nem no render.";
+
+        var mbBtns = secMB.add("group");
+        mbBtns.orientation = "row";
+        mbBtns.alignChildren = ["fill", "center"];
+
+        var mbOnButton = uiButton(mbBtns, "LIGAR MOTION BLUR", {primary: true});
+        var mbOffButton = uiButton(mbBtns, "DESLIGAR MOTION BLUR", {height: 32});
+
         var status = addStatus(tab, "Selecione comps no Project.");
 
-        function processSelection(enable3D) {
+        // Câmeras, luzes e camadas só de áudio não têm switch 3D.
+        function canBe3D(layer) {
+            if (layer instanceof CameraLayer || layer instanceof LightLayer) return false;
+            try {
+                if (layer.hasVideo === false) return false;
+            } catch (eV) {}
+            return true;
+        }
+
+        // Motion Blur: tudo que aparece na imagem (null não renderiza).
+        function canBlur(layer) {
+            if (!canBe3D(layer)) return false;
+            try {
+                if (layer.nullLayer) return false;
+            } catch (eN) {}
+            return true;
+        }
+
+        var MODES = {
+            threeD: {
+                label: "3D",
+                canApply: canBe3D,
+                get: function (layer) { return layer.threeDLayer; },
+                set: function (layer, v) { layer.threeDLayer = v; }
+            },
+            motionBlur: {
+                label: "Motion Blur",
+                canApply: canBlur,
+                get: function (layer) { return layer.motionBlur; },
+                set: function (layer, v) { layer.motionBlur = v; },
+                onComp: function (comp, v) {
+                    if (!compMBCheckbox.value) return false;
+                    if (comp.motionBlur === v) return false;
+                    comp.motionBlur = v;
+                    return true;
+                }
+            }
+        };
+
+        function targetComps() {
+            var out = getSelectedComps();
+
+            if (out.length === 0 && app.project && isComp(app.project.activeItem)) {
+                out.push(app.project.activeItem);
+            }
+
+            return out;
+        }
+
+        function processSelection(mode, enable) {
             if (!app.project) {
                 alert("Nenhum projeto aberto.");
                 return;
             }
 
-            var selection = app.project.selection;
+            var comps = targetComps();
 
-            if (!selection || selection.length === 0) {
-                alert("Selecione pelo menos uma composição no Project.");
+            if (comps.length === 0) {
+                alert("Selecione pelo menos uma composição no Project (ou abra uma comp).");
                 return;
             }
 
@@ -2236,18 +2300,12 @@
             var processLocked = lockedCheckbox.value;
             var processed = {};
             var compCount = 0;
+            var compSwitches = 0;
             var layerCount = 0;
 
-            // Câmeras, luzes e layers só de áudio não têm switch 3D.
-            function canBe3D(layer) {
-                if (layer instanceof CameraLayer || layer instanceof LightLayer) {
-                    return false;
-                }
-                try {
-                    if (layer.hasVideo === false) return false;
-                } catch (eV) {}
-                return true;
-            }
+            saveSetting("layersRecursive", recursive ? "1" : "0");
+            saveSetting("layersLocked", processLocked ? "1" : "0");
+            saveSetting("mbCompSwitch", compMBCheckbox.value ? "1" : "0");
 
             function processComp(comp) {
                 if (!(comp instanceof CompItem)) return;
@@ -2258,18 +2316,22 @@
                 processed[key] = true;
                 compCount++;
 
+                if (mode.onComp) {
+                    try { if (mode.onComp(comp, enable)) compSwitches++; } catch (eC) {}
+                }
+
                 for (var i = 1; i <= comp.numLayers; i++) {
                     var layer = comp.layer(i);
 
                     try {
-                        if (canBe3D(layer) && layer.threeDLayer !== enable3D) {
+                        if (mode.canApply(layer) && mode.get(layer) !== enable) {
                             var wasLocked = layer.locked;
 
                             if (wasLocked && processLocked) layer.locked = false;
 
                             if (!layer.locked) {
                                 try {
-                                    layer.threeDLayer = enable3D;
+                                    mode.set(layer, enable);
                                     layerCount++;
                                 } catch (e0) {}
                             }
@@ -2280,40 +2342,31 @@
 
                     if (recursive) {
                         try {
-                            if (layer.source instanceof CompItem) {
-                                processComp(layer.source);
-                            }
+                            if (layer.source instanceof CompItem) processComp(layer.source);
                         } catch (e2) {}
                     }
                 }
             }
 
-            app.beginUndoGroup(
-                enable3D ? "Ativar 3D" : "Desativar 3D"
-            );
+            app.beginUndoGroup((enable ? "Ligar " : "Desligar ") + mode.label);
 
             try {
-                for (var i = 0; i < selection.length; i++) {
-                    if (selection[i] instanceof CompItem) {
-                        processComp(selection[i]);
-                    }
-                }
+                for (var i = 0; i < comps.length; i++) processComp(comps[i]);
             } finally {
                 app.endUndoGroup();
             }
 
             status.text =
-                compCount + " comps | " +
-                layerCount + " camada(s) alterada(s).";
+                mode.label + (enable ? " ligado" : " desligado") + ": " +
+                layerCount + " camada(s) em " + compCount + " comp(s)" +
+                (compSwitches ? " | chave da comp " + (enable ? "ligada" : "desligada") + " em " + compSwitches : "") +
+                ".";
         }
 
-        make3DButton.onClick = function () {
-            processSelection(true);
-        };
-
-        disable3DButton.onClick = function () {
-            processSelection(false);
-        };
+        make3DButton.onClick = function () { processSelection(MODES.threeD, true); };
+        disable3DButton.onClick = function () { processSelection(MODES.threeD, false); };
+        mbOnButton.onClick = function () { processSelection(MODES.motionBlur, true); };
+        mbOffButton.onClick = function () { processSelection(MODES.motionBlur, false); };
     }
 
     function getExpressionStoreFile() {
@@ -4747,7 +4800,7 @@
             {label: "Comps", abbr: "Comp", tip: "Resolução, FPS, duração e renderer", build: buildCompsTab},
             {label: "Duplicar", abbr: "Dup", tip: "Duplicar comps com precomps independentes", build: buildDuplicaTab},
             {label: "Explode", abbr: "Txt", tip: "Dividir camadas de texto", build: buildExplodeTab},
-            {label: "3D", abbr: "3D", tip: "Ligar/desligar 3D em lote", build: build3DTab},
+            {label: "3D/Blur", abbr: "3D", tip: "Ligar/desligar 3D e Motion Blur em lote", build: build3DTab},
             {label: "Expressões", abbr: "Expr", tip: "Biblioteca de expressões favoritas", build: buildExpressionsTab}
         ];
 

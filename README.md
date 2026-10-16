@@ -8,7 +8,7 @@ Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelera
 | **Comps** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
-| **3D** | Liga ou desliga o switch 3D em todas as camadas das comps selecionadas, opcionalmente entrando nas precomps e em camadas bloqueadas. |
+| **3D/Blur** | Liga ou desliga o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
 | **Expressões** | 18 atalhos prontos (delay, wiggle, texto, contadores, caixa reativa, 3D…), cada um com descrição, onde aplicar e tutorial em comentário. Também guarda suas próprias expressões (★ Minhas): salvar, buscar, capturar de uma propriedade e aplicar (duplo clique aplica direto). |
 
 ## Instalação
