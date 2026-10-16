@@ -26,6 +26,8 @@
       lado a lado no painel largo, empilhadas no estreito (botão ⇆ força
       um modo); cada ferramenta recolhe/expande pelo cabeçalho;
       editor de curva quadrado e compacto.
+    - Barra de rolagem: o painel pode ficar pequeno e o conteúdo rola
+      (cabeçalho e abas fixos); cada aba rola só o próprio conteúdo.
     - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
       (e a chave da comp); usa a comp aberta se nada estiver selecionado.
     - Expressões: 18 atalhos do repositório After-effects-Expressions,
@@ -4739,6 +4741,7 @@
                 win.layout.layout(true);
                 win.layout.resize();
             } catch (e) {}
+            updateScroll();
             relaying = false;
         }
 
@@ -4755,6 +4758,11 @@
             for (var i = 0; i < pages.length; i++) pages[i].visible = (i === idx);
             saveSetting("lastGroup", idx);
             try { groupViews[idx].refresh(); } catch (e) {}
+
+            // cada aba começa do topo
+            activeGroup = idx;
+            try { scrollbar.value = 0; } catch (eS) {}
+            updateScroll();
         });
 
         var LAYOUT_LABELS = {auto: "Auto", wide: "Lado a lado", stacked: "Empilhado"};
@@ -4771,9 +4779,37 @@
             relayout();
         };
 
-        stack = win.add("group");
+        // ----- área com rolagem -----
+        // viewport: janela visível (tamanho do painel); content: tudo, mais alto
+        // que o viewport quando o painel é pequeno; scrollbar move o content.
+        var scrollRow = win.add("group");
+        scrollRow.orientation = "row";
+        scrollRow.alignment = ["fill", "fill"];
+        scrollRow.alignChildren = ["fill", "fill"];
+        scrollRow.spacing = 4;
+        scrollRow.margins = 0;
+
+        var viewport = scrollRow.add("group");
+        viewport.orientation = "column";
+        viewport.alignment = ["fill", "fill"];
+        viewport.alignChildren = ["fill", "top"];
+        viewport.margins = 0;
+        viewport.preferredSize = [260, 160]; // não deixa o conteúdo ditar o tamanho do painel
+
+        var content = viewport.add("group");
+        content.orientation = "column";
+        content.alignment = ["fill", "top"];
+        content.alignChildren = ["fill", "top"];
+        content.margins = [0, 0, 0, 6];
+
+        var scrollbar = scrollRow.add("scrollbar", undefined, 0, 0, 100);
+        scrollbar.alignment = ["right", "fill"];
+        scrollbar.preferredSize.width = 14;
+        scrollbar.stepdelta = 30;
+
+        stack = content.add("group");
         stack.orientation = "stack";
-        stack.alignment = ["fill", "fill"];
+        stack.alignment = ["fill", "top"];
         stack.alignChildren = ["fill", "top"];
 
         for (var i = 0; i < GROUPS.length; i++) {
@@ -4793,9 +4829,56 @@
             for (var p = 0; p < pend.length; p++) setCollapsed(pend[p], true);
         }
 
+        var activeGroup = startGroup;
+
+        // Altura real da aba ativa (as outras abas do stack não contam).
+        function contentHeight() {
+            var h = 0;
+            try { h = pages[activeGroup].preferredSize[1]; } catch (e) {}
+            if (!h || h < 0) {
+                try { h = content.size[1]; } catch (e2) {}
+            }
+            return h + 6;
+        }
+
+        function scrollTo(v) {
+            try {
+                content.location = [content.location[0], -Math.round(v)];
+            } catch (e) {}
+        }
+
+        function updateScroll() {
+            try {
+                var viewH = viewport.size[1];
+                var max = Math.max(0, contentHeight() - viewH);
+
+                scrollbar.maxvalue = Math.max(1, max);
+                if (scrollbar.value > max) scrollbar.value = max;
+                scrollbar.jumpdelta = Math.max(30, Math.round(viewH * 0.9));
+                scrollbar.enabled = max > 0;
+
+                scrollTo(max > 0 ? scrollbar.value : 0);
+            } catch (e) {}
+        }
+
+        scrollbar.onChanging =
+        scrollbar.onChange = function () {
+            scrollTo(this.value);
+        };
+
         applyResponsive();
         win.layout.layout(true);
         nav.select(startGroup);
+
+        // Janela flutuante: abre num tamanho confortável, rolando o resto.
+        if (win instanceof Window) {
+            try {
+                win.size = [Math.max(win.size[0], 380), Math.min(Math.max(contentHeight() + 120, 300), 760)];
+                win.layout.resize();
+            } catch (eSize) {}
+        }
+
+        updateScroll();
 
         win.onResizing =
         win.onResize = function () {
@@ -4803,6 +4886,7 @@
                 try { this.layout.layout(true); } catch (e) {}
             }
             this.layout.resize();
+            updateScroll();
         };
 
         return win;

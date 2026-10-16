@@ -10,6 +10,8 @@ O painel tem 3 abas principais, e cada uma mostra **todas as suas ferramentas ao
 
 Com o painel largo, as ferramentas ficam lado a lado em colunas; estreito, ficam empilhadas. O botão **⇆** ao lado das abas troca entre *Auto*, *Lado a lado* e *Empilhado*. Clicar no cabeçalho de uma ferramenta recolhe ou expande ela, e o painel lembra o que ficou recolhido.
 
+A barra de rolagem à direita deixa você diminuir o painel o quanto quiser e ainda alcançar todos os botões. O cabeçalho e as abas ficam fixos no topo; a barra só fica ativa quando o conteúdo não cabe.
+
 As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é lilás).
 
 | Ferramenta | O que faz |
