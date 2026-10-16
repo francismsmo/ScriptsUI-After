@@ -2,15 +2,17 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-O painel tem 3 abas principais, com sub-abas dentro:
+O painel tem 3 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
 
-- **Animação** → Curvas · Explode
-- **Comps** → Ajustes · Duplicar · 3D / Blur
+- **Animação** = Curvas + Explode
+- **Comps** = Ajustes + Duplicar + 3D / Blur
 - **Expressões**
+
+Com o painel largo, as ferramentas ficam lado a lado em colunas; estreito, ficam empilhadas. O botão **⇆** ao lado das abas troca entre *Auto*, *Lado a lado* e *Empilhado*. Clicar no cabeçalho de uma ferramenta recolhe ou expande ela, e o painel lembra o que ficou recolhido.
 
 As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é lilás).
 
-| Sub-aba | O que faz |
+| Ferramenta | O que faz |
 |---|---|
 | **Curvas** | Biblioteca de curvas de velocidade em miniaturas quadradas (16 por página, a ponta lilás marca as favoritas). Salve suas curvas favoritas, organize por categoria, marque favoritas, edite arrastando as alças, capture a curva de keyframes que já existem e aplique com um clique. |
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
@@ -82,7 +84,7 @@ Com **Organizar na pasta** e **Separar as precomps** ligados, duplicar a comp `E
 - **Explode** funciona melhor no After Effects 24.3+, que preserva estilos por caractere. Texto justificado e vertical não são suportados.
 - Outros scripts e o KBar podem chamar `explodeMesmo({split: "words", deleteOriginal: true})` depois que o painel foi aberto uma vez.
 - Todas as ações entram num único Undo (Ctrl+Z desfaz a operação inteira).
-- O painel lembra a última aba e sub-aba abertas.
+- O painel lembra a última aba aberta, a disposição escolhida e as ferramentas recolhidas.
 
 Os arquivos salvos ficam em `Folder.userData/MesmoTools/` (no Windows, `%APPDATA%\MesmoTools\`).
 

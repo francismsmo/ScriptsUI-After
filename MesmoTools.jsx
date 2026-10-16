@@ -3,11 +3,8 @@
     MESMO TOOLS - painel ScriptUI único para Adobe After Effects.
 
     Abas:
-    - Animação > Curvas: biblioteca de curvas de velocidade
-    - Animação > Explode: divide camadas de texto
-    - Comps > Ajustes: resolução, FPS, duração e renderer 3D em lote
-    - Comps > Duplicar: duplica comps com precomps independentes
-    - Comps > 3D / Blur: liga/desliga 3D e Motion Blur nas comps e precomps
+    - Animação = Curvas + Explode (juntos na mesma tela)
+    - Comps = Ajustes + Duplicar + 3D / Blur (juntos na mesma tela)
     - Expressões: atalhos prontos + suas expressões favoritas
 
     Arquivos salvos em Folder.userData/MesmoTools/:
@@ -23,10 +20,11 @@
       importar/exportar biblioteca.
     - Explode: recusa texto vertical/justificado (como o avulso fazia) e
       expõe explodeMesmo(options) para outros scripts.
-    - Visual: destaque lilás; 3 abas principais com sub-abas
-      (Animação: Curvas/Explode · Comps: Ajustes/Duplicar/3D-Blur ·
-      Expressões); miniaturas de curva quadradas e menores; editor de
-      curva quadrado e compacto.
+    - Visual: destaque lilás; 3 abas principais (Animação, Comps,
+      Expressões) que mostram todas as ferramentas ao mesmo tempo:
+      lado a lado no painel largo, empilhadas no estreito (botão ⇆ força
+      um modo); cada ferramenta recolhe/expande pelo cabeçalho;
+      miniaturas de curva quadradas e menores; editor compacto.
     - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
       (e a chave da comp); usa a comp aberta se nada estiver selecionado.
     - Expressões: 18 atalhos do repositório After-effects-Expressions,
@@ -473,74 +471,49 @@
     }
 
     /*
-        Sub-abas (controle segmentado) dentro de uma aba principal.
-        items: [{label, abbr}]
+        Cabeçalho de ferramenta (clicável): seta + título.
+        Clique recolhe/expande o conteúdo da ferramenta.
     */
-    function uiSubNav(parent, items, onSelect) {
-        var row = parent.add("group");
-        row.orientation = "row";
-        row.alignment = ["fill", "top"];
-        row.alignChildren = ["fill", "fill"];
-        row.spacing = 0;
-        row.margins = 0;
+    function uiToolHeader(parent, title) {
+        var b = parent.add("button", undefined, title);
+        b.alignment = ["fill", "top"];
+        b.preferredSize = [120, 26];
+        b.mesmoOpen = true;
+        b.helpTip = "Clique para recolher ou expandir";
 
-        var nav = {buttons: [], index: 0};
-        var count = items.length;
+        b.onDraw = function (state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
 
-        for (var i = 0; i < count; i++) {
-            var b = row.add("button", undefined, items[i].label);
-            b.mesmoAbbr = items[i].abbr || items[i].label;
-            b.mesmoIndex = i;
-            b.preferredSize = [30, 24];
-            b.helpTip = items[i].tip || items[i].label;
+            uiRoundRect(g, 0, 0, w, h, 4);
+            g.fillPath(uiBrush(g, state.mouseOver ? THEME.surfaceHover : THEME.surface));
 
-            b.onDraw = function (state) {
-                var g = this.graphics;
-                var w = this.size[0];
-                var h = this.size[1];
-                var idx = this.mesmoIndex;
-                var active = nav.index === idx;
+            g.newPath();
+            g.rectPath(0, 0, 3, h);
+            g.fillPath(uiBrush(g, THEME.accent));
 
-                // trilho de fundo
-                g.newPath();
-                g.rectPath(0, 0, w, h);
-                g.fillPath(uiBrush(g, THEME.well));
+            // seta: ▼ aberto, ▶ fechado
+            var cx = 13;
+            var cy = h / 2;
+            g.newPath();
+            if (this.mesmoOpen) {
+                g.moveTo(cx - 4, cy - 2);
+                g.lineTo(cx + 4, cy - 2);
+                g.lineTo(cx, cy + 3);
+            } else {
+                g.moveTo(cx - 2, cy - 4);
+                g.lineTo(cx + 3, cy);
+                g.lineTo(cx - 2, cy + 4);
+            }
+            g.closePath();
+            g.fillPath(uiBrush(g, THEME.accent));
 
-                if (active) {
-                    uiRoundRect(g, 2, 2, w - 4, h - 4, 3);
-                    g.fillPath(uiBrush(g, THEME.accent));
-                } else if (state.mouseOver) {
-                    uiRoundRect(g, 2, 2, w - 4, h - 4, 3);
-                    g.fillPath(uiBrush(g, THEME.surface));
-                }
-
-                var font = uiFont(active ? "BOLD" : "REGULAR", 11);
-                var s = this.text;
-                if (g.measureString(s, font)[0] > w - 10) s = this.mesmoAbbr;
-
-                uiText(
-                    g,
-                    uiFit(g, s, font, w - 6),
-                    font,
-                    active ? THEME.textOnAccent : (state.mouseOver ? THEME.text : THEME.textDim),
-                    0, 0, w, h
-                );
-            };
-
-            b.onClick = function () {
-                nav.select(this.mesmoIndex);
-            };
-
-            nav.buttons.push(b);
-        }
-
-        nav.select = function (idx) {
-            nav.index = idx;
-            uiRedraw(row);
-            if (onSelect) onSelect(idx);
+            var font = uiFont("BOLD", 12);
+            uiText(g, uiFit(g, this.text.toUpperCase(), font, w - 32), font, THEME.text, 24, 0, w - 28, h, "left");
         };
 
-        return nav;
+        return b;
     }
 
     var SETTINGS_SECTION = "MesmoTools";
@@ -4894,89 +4867,173 @@
 
         uiHeader(win);
 
-        // Abas principais; cada uma pode ter sub-abas.
+        // Abas principais. Cada aba mostra TODAS as suas ferramentas ao mesmo
+        // tempo: lado a lado quando o painel é largo, empilhadas quando é estreito.
         var GROUPS = [
             {
-                label: "Animação", abbr: "Anim", tip: "Curvas de velocidade e Explode de texto",
-                subs: [
-                    {label: "Curvas", abbr: "Ease", build: buildCurvesTab},
-                    {label: "Explode", abbr: "Txt", build: buildExplodeTab}
+                label: "Animação", abbr: "Anim", tip: "Curvas de velocidade + Explode de texto",
+                tools: [
+                    {label: "Curvas", build: buildCurvesTab, width: 330},
+                    {label: "Explode", build: buildExplodeTab, width: 290}
                 ]
             },
             {
-                label: "Comps", abbr: "Comp", tip: "Ajustes de comp, Duplicar, 3D e Motion Blur",
-                subs: [
-                    {label: "Ajustes", abbr: "Ajst", build: buildCompsTab},
-                    {label: "Duplicar", abbr: "Dup", build: buildDuplicaTab},
-                    {label: "3D / Blur", abbr: "3D", build: build3DTab}
+                label: "Comps", abbr: "Comp", tip: "Ajustes de comp + Duplicar + 3D / Motion Blur",
+                tools: [
+                    {label: "Ajustes", build: buildCompsTab, width: 300},
+                    {label: "Duplicar", build: buildDuplicaTab, width: 300},
+                    {label: "3D / Blur", build: build3DTab, width: 270}
                 ]
             },
             {
                 label: "Expressões", abbr: "Expr", tip: "Atalhos de expressões e suas favoritas",
-                subs: [
-                    {label: "Expressões", build: buildExpressionsTab}
+                tools: [
+                    {label: "Expressões", build: buildExpressionsTab, width: 360, noHeader: true}
                 ]
             }
         ];
 
+        var BIG = 10000;
+        var groupViews = [];
+
+        function setCollapsed(body, collapsed) {
+            body.visible = !collapsed;
+            // ScriptUI reserva espaço para itens escondidos: zera o tamanho máximo.
+            body.maximumSize = collapsed ? [BIG, 0] : [BIG, BIG];
+        }
+
         function buildGroup(page, group, gIndex) {
             page.orientation = "column";
             page.alignChildren = ["fill", "top"];
-            page.spacing = 6;
-            page.margins = [0, 2, 0, 0];
+            page.margins = [0, 4, 0, 0];
 
-            var subPages = [];
-            var hooks = [];
-            var subNav = null;
-            var key = "lastSub" + gIndex;
+            var row = page.add("group");
+            row.orientation = "row";
+            row.alignment = ["fill", "fill"];
+            row.alignChildren = ["fill", "top"];
+            row.spacing = 12;
 
-            function show(idx) {
-                for (var i = 0; i < subPages.length; i++) subPages[i].visible = (i === idx);
-                saveSetting(key, idx);
-                try { if (hooks[idx] && hooks[idx].refresh) hooks[idx].refresh(); } catch (e) {}
+            var view = {row: row, tools: [], hooks: [], minWide: 0, pendingCollapse: []};
+
+            function makeToggle(h, b, k) {
+                return function () {
+                    h.mesmoOpen = !h.mesmoOpen;
+                    uiRedraw(h);
+                    setCollapsed(b, !h.mesmoOpen);
+                    saveSetting(k, h.mesmoOpen ? "1" : "0");
+                    relayout();
+                };
             }
 
-            if (group.subs.length > 1) {
-                subNav = uiSubNav(page, group.subs, show);
+            for (var t = 0; t < group.tools.length; t++) {
+                var tool = group.tools[t];
+                var key = "open_" + gIndex + "_" + t;
+
+                var block = row.add("group");
+                block.orientation = "column";
+                block.alignment = ["fill", "top"];
+                block.alignChildren = ["fill", "top"];
+                block.spacing = 4;
+                block.mesmoWidth = tool.width;
+
+                var header = tool.noHeader ? null : uiToolHeader(block, tool.label);
+
+                var body = block.add("group");
+                body.alignment = ["fill", "top"];
+
+                if (header) {
+                    header.onClick = makeToggle(header, body, key);
+
+                    if (loadSetting(key, "1") === "0") {
+                        header.mesmoOpen = false;
+                        view.pendingCollapse.push(body);
+                    }
+                }
+
+                view.hooks.push(tool.build(body) || null);
+                view.tools.push(block);
+                view.minWide += tool.width + 12;
             }
 
-            var subStack = page.add("group");
-            subStack.orientation = "stack";
-            subStack.alignment = ["fill", "fill"];
-            subStack.alignChildren = ["fill", "top"];
-
-            for (var i = 0; i < group.subs.length; i++) {
-                var sp = subStack.add("group");
-                sp.alignment = ["fill", "fill"];
-                hooks.push(group.subs[i].build(sp) || null);
-                sp.visible = false;
-                subPages.push(sp);
-            }
-
-            var start = parseInt(loadSetting(key, "0"), 10);
-            if (isNaN(start) || start < 0 || start >= subPages.length) start = 0;
-
-            return {
-                start: function () {
-                    if (subNav) subNav.select(start);
-                    else show(start);
-                },
-                refresh: function () {
-                    var idx = subNav ? subNav.index : 0;
-                    try { if (hooks[idx] && hooks[idx].refresh) hooks[idx].refresh(); } catch (e) {}
+            view.refresh = function () {
+                for (var i = 0; i < view.hooks.length; i++) {
+                    try { if (view.hooks[i] && view.hooks[i].refresh) view.hooks[i].refresh(); } catch (e) {}
                 }
             };
+
+            return view;
         }
+
+        var layoutMode = loadSetting("layoutMode", "auto"); // auto | wide | stacked
+
+        // Escolhe lado a lado ou empilhado conforme a largura do painel.
+        function applyResponsive() {
+            var w = 0;
+            try { w = win.size[0]; } catch (e) {}
+            var changed = false;
+
+            for (var i = 0; i < groupViews.length; i++) {
+                var v = groupViews[i];
+                var wide = layoutMode === "wide" || (layoutMode === "auto" && w >= v.minWide);
+                var want = wide ? "row" : "column";
+
+                if (v.row.orientation !== want) {
+                    v.row.orientation = want;
+                    changed = true;
+                }
+
+                // Lado a lado: cada coluna com sua largura. Empilhado: ocupa tudo.
+                for (var t = 0; t < v.tools.length; t++) {
+                    try {
+                        v.tools[t].preferredSize.width = wide ? v.tools[t].mesmoWidth : -1;
+                    } catch (eW) {}
+                }
+            }
+
+            return changed;
+        }
+
+        var relaying = false;
+
+        function relayout() {
+            if (relaying) return;
+            relaying = true;
+            try {
+                applyResponsive();
+                win.layout.layout(true);
+                win.layout.resize();
+            } catch (e) {}
+            relaying = false;
+        }
+
+        var topRow = win.add("group");
+        topRow.orientation = "row";
+        topRow.alignment = ["fill", "top"];
+        topRow.alignChildren = ["fill", "fill"];
+        topRow.spacing = 6;
 
         var stack;
         var pages = [];
-        var groupHooks = [];
 
-        var nav = uiNav(win, GROUPS, function (idx) {
+        var nav = uiNav(topRow, GROUPS, function (idx) {
             for (var i = 0; i < pages.length; i++) pages[i].visible = (i === idx);
             saveSetting("lastGroup", idx);
-            try { groupHooks[idx].refresh(); } catch (e) {}
+            try { groupViews[idx].refresh(); } catch (e) {}
         });
+
+        var LAYOUT_LABELS = {auto: "Auto", wide: "Lado a lado", stacked: "Empilhado"};
+        var btnLayout = uiButton(topRow, "⇆", {width: 28, height: 28});
+        btnLayout.alignment = ["right", "fill"];
+        btnLayout.helpTip = "Disposição das ferramentas: " + LAYOUT_LABELS[layoutMode] +
+            "\n(clique para alternar: Auto → Lado a lado → Empilhado)";
+
+        btnLayout.onClick = function () {
+            layoutMode = layoutMode === "auto" ? "wide" : (layoutMode === "wide" ? "stacked" : "auto");
+            saveSetting("layoutMode", layoutMode);
+            btnLayout.helpTip = "Disposição das ferramentas: " + LAYOUT_LABELS[layoutMode] +
+                "\n(clique para alternar: Auto → Lado a lado → Empilhado)";
+            relayout();
+        };
 
         stack = win.add("group");
         stack.orientation = "stack";
@@ -4986,7 +5043,7 @@
         for (var i = 0; i < GROUPS.length; i++) {
             var page = stack.add("group");
             page.alignment = ["fill", "fill"];
-            groupHooks.push(buildGroup(page, GROUPS[i], i));
+            groupViews.push(buildGroup(page, GROUPS[i], i));
             page.visible = false;
             pages.push(page);
         }
@@ -4994,13 +5051,21 @@
         var startGroup = parseInt(loadSetting("lastGroup", "0"), 10);
         if (isNaN(startGroup) || startGroup < 0 || startGroup >= GROUPS.length) startGroup = 0;
 
-        win.layout.layout(true);
+        // Ferramentas que estavam recolhidas da última vez.
+        for (i = 0; i < groupViews.length; i++) {
+            var pend = groupViews[i].pendingCollapse;
+            for (var p = 0; p < pend.length; p++) setCollapsed(pend[p], true);
+        }
 
-        for (i = 0; i < groupHooks.length; i++) groupHooks[i].start();
+        applyResponsive();
+        win.layout.layout(true);
         nav.select(startGroup);
 
         win.onResizing =
         win.onResize = function () {
+            if (applyResponsive()) {
+                try { this.layout.layout(true); } catch (e) {}
+            }
             this.layout.resize();
         };
 
