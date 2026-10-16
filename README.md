@@ -14,7 +14,7 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 
 | Ferramenta | O que faz |
 |---|---|
-| **Curvas** | Biblioteca de curvas de velocidade em miniaturas quadradas (16 por página, a ponta lilás marca as favoritas). Salve suas curvas favoritas, organize por categoria, marque favoritas, edite arrastando as alças, capture a curva de keyframes que já existem e aplique com um clique. |
+| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e editor **ao vivo**: escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
@@ -34,13 +34,12 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 
 As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo formato do CSS e do [cubic-bezier.com](https://cubic-bezier.com). Dá para colar valores de lá direto no campo *Bezier*.
 
-- **Aplicar:** selecione as keyframes (duas ou mais vizinhas, em uma ou várias propriedades) e clique em **APLICAR NAS KEYFRAMES**. Com uma keyframe só, a curva vai no trecho até a próxima.
-- **Alt + clique** numa miniatura aplica a curva na hora.
-- **Só saída / Só entrada:** aplica só o lado da curva que sai da 1ª key ou que chega na 2ª.
-- **Capturar das keys:** lê a curva entre duas keyframes que você já ajustou no Graph Editor. Dê um nome e salve.
-- **Organizar:** categorias (digite uma nova no campo *Categoria*), ★ favoritas, busca por nome e ◀ ▶ para mudar a ordem.
-- **Importar / Exportar:** salva a biblioteca num `.txt` para backup ou para levar para outra máquina.
-- **Restaurar padrões:** recoloca as 22 curvas que vêm com o painel sem apagar as suas.
+- **Selecione as keyframes** (duas ou mais vizinhas, em uma ou várias propriedades) e mexa no editor: a timeline atualiza na hora. Com uma keyframe só, a curva vai no trecho até a próxima.
+- **Dropdown:** escolher uma curva já aplica.
+- **Alças:** arraste para ajustar ao vivo; Shift arredonda os valores.
+- **Salvar / ★ / Excluir:** guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown) ou apaga.
+- **Aplicar ao vivo:** desmarque se quiser só desenhar a curva sem mexer nas keys.
+- Cada atualização entra no Undo; enquanto você arrasta, o After registra alguns passos por segundo.
 
 Funciona em propriedades numéricas (posição, escala, rotação, opacidade, cor, efeitos…). Paths de máscara/shape e Source Text não são suportados.
 Em **Position** com caminho espacial, curvas que passam do limite (tipo *Back*) não ultrapassam o ponto final. Para esse efeito, use **Separate Dimensions**.

@@ -15,16 +15,17 @@
     - Tudo num arquivo só: MesmoTools.jsx (antigo CompManager_Mesmo.jsx).
     - Visual novo: cabeçalho, navegação e botões desenhados, seções no
       lugar das caixas, aba aberta por último é lembrada.
-    - Nova aba Curvas: 22 curvas prontas, categorias, favoritas, busca,
-      editor com alças arrastáveis, capturar curva das keyframes,
-      importar/exportar biblioteca.
+    - Nova aba Curvas: 22 curvas prontas num dropdown (favoritas no topo,
+      separadas por categoria) e editor ao vivo: escolher uma curva,
+      arrastar as alças ou digitar os valores já muda as keyframes
+      selecionadas na timeline.
     - Explode: recusa texto vertical/justificado (como o avulso fazia) e
       expõe explodeMesmo(options) para outros scripts.
     - Visual: destaque lilás; 3 abas principais (Animação, Comps,
       Expressões) que mostram todas as ferramentas ao mesmo tempo:
       lado a lado no painel largo, empilhadas no estreito (botão ⇆ força
       um modo); cada ferramenta recolhe/expande pelo cabeçalho;
-      miniaturas de curva quadradas e menores; editor compacto.
+      editor de curva quadrado e compacto.
     - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
       (e a chave da comp); usa a comp aberta se nada estiver selecionado.
     - Expressões: 18 atalhos do repositório After-effects-Expressions,
@@ -4035,39 +4036,6 @@
         return true;
     }
 
-    function captureCurveFromSegment(prop, k1, k2) {
-        if (
-            prop.keyOutInterpolationType(k1) === KeyframeInterpolationType.HOLD ||
-            prop.keyInInterpolationType(k2) === KeyframeInterpolationType.HOLD
-        ) {
-            throw new Error("Keyframes em Hold não têm curva para capturar.");
-        }
-
-        var dt = prop.keyTime(k2) - prop.keyTime(k1);
-        var outEase = prop.keyOutTemporalEase(k1);
-        var inEase = prop.keyInTemporalEase(k2);
-        var deltas = keyDeltas(prop, k1, k2, outEase.length);
-
-        if (!deltas || dt <= 0) throw new Error("Não foi possível ler essas keyframes.");
-
-        var d = 0;
-        for (var i = 1; i < deltas.length; i++) {
-            if (Math.abs(deltas[i]) > Math.abs(deltas[d])) d = i;
-        }
-
-        if (Math.abs(deltas[d]) < 1e-9) {
-            throw new Error("As duas keyframes têm o mesmo valor, então não há curva para ler.");
-        }
-
-        var avg = deltas[d] / dt;
-        var x1 = outEase[d].influence / 100;
-        var x2 = 1 - inEase[d].influence / 100;
-        var y1 = (outEase[d].speed / avg) * x1;
-        var y2 = 1 - (inEase[d].speed / avg) * (1 - x2);
-
-        return {x1: round3(x1), y1: round3(y1), x2: round3(x2), y2: round3(y2)};
-    }
-
     // Segmentos [prop, k1, k2] a partir das keyframes selecionadas na comp ativa.
     function collectCurveSegments(comp) {
         var props = [];
@@ -4128,6 +4096,8 @@
     }
 
     // ---------- aba ----------
+    // Tudo ao vivo: escolher uma curva no dropdown, arrastar as alças ou
+    // digitar os valores já muda as keyframes selecionadas na timeline.
 
     function buildCurvesTab(tab) {
         tab.orientation = "column";
@@ -4135,13 +4105,9 @@
         tab.spacing = 8;
         tab.margins = [0, 6, 0, 0];
 
-        var PER_PAGE = 16;
-        var COLS = 8;
-        var TILE = 34;
-        var ALL = "Todas";
-        var FAVS = "★ Favoritas";
         var ED_RANGE = [-0.6, 1.6];
         var ED_PAD = 12;
+        var LIVE_INTERVAL = 60; // ms entre aplicações durante o arraste
 
         var curves = readCurveFile(getCurveStoreFile());
         if (!curves) {
@@ -4150,102 +4116,26 @@
         }
 
         var lib = {
-            cat: loadSetting("curvesCategory", ALL),
-            page: 0,
             selected: null,
             edit: makeCurve("", "Minhas", 0.333, 0, 0.667, 1, false),
-            busy: false
+            busy: false,
+            ddMap: []
         };
 
-        // ----- Biblioteca -----
-        var libSec = uiSection(tab, "Biblioteca de curvas");
+        // ----- Biblioteca (dropdown) -----
+        var libRow = tab.add("group");
+        libRow.orientation = "row";
+        libRow.alignChildren = ["fill", "center"];
+        libRow.spacing = 4;
 
-        var filterRow = libSec.add("group");
-        filterRow.orientation = "row";
-        filterRow.alignChildren = ["fill", "center"];
+        var ddCurves = libRow.add("dropdownlist", undefined, []);
+        ddCurves.alignment = ["fill", "center"];
+        ddCurves.helpTip = "Escolha uma curva: ela já é aplicada nas keyframes selecionadas";
 
-        var ddCat = filterRow.add("dropdownlist", undefined, []);
-        ddCat.preferredSize.width = 130;
-
-        var txtFind = filterRow.add("edittext", undefined, "");
-        txtFind.alignment = ["fill", "center"];
-        txtFind.helpTip = "Buscar curva pelo nome";
-
-        var grid = libSec.add("group");
-        grid.orientation = "column";
-        grid.alignChildren = ["fill", "top"];
-        grid.spacing = 3;
-        grid.alignChildren = ["left", "top"];
-
-        var slots = [];
-
-        // Miniatura quadrada: só a curva. Nome no tooltip e na linha de baixo.
-        function drawThumb(state) {
-            var g = this.graphics;
-            var w = this.size[0];
-            var h = this.size[1];
-            var c = this.mesmoCurve;
-
-            uiRoundRect(g, 0, 0, w, h, 3);
-
-            if (!c) {
-                g.fillPath(uiBrush(g, THEME.well));
-                return;
-            }
-
-            var sel = lib.selected === c.name;
-            g.fillPath(uiBrush(g, sel ? THEME.surfaceHover : (state.mouseOver ? THEME.surfaceHover : THEME.surface)));
-
-            if (sel) {
-                uiRoundRect(g, 0.5, 0.5, w - 1, h - 1, 3);
-                g.strokePath(uiPen(g, THEME.accent, 1.5));
-            }
-
-            var pad = 5;
-            uiStrokeCurve(g, c, pad, pad, w - pad * 2, h - pad * 2, curveYRange(c),
-                sel ? THEME.accent : THEME.text, 1.5);
-
-            // favorita: cantinho lilás
-            if (c.fav) {
-                g.newPath();
-                g.moveTo(w - 8, 0);
-                g.lineTo(w, 0);
-                g.lineTo(w, 8);
-                g.closePath();
-                g.fillPath(uiBrush(g, THEME.accent));
-            }
-        }
-
-        for (var r = 0; r < PER_PAGE / COLS; r++) {
-            var row = grid.add("group");
-            row.orientation = "row";
-            row.alignChildren = ["left", "top"];
-            row.spacing = 3;
-
-            for (var cIdx = 0; cIdx < COLS; cIdx++) {
-                var slot = row.add("button", undefined, "");
-                slot.preferredSize = [TILE, TILE];
-                slot.mesmoCurve = null;
-                slot.onDraw = drawThumb;
-                slot.onClick = onThumbClick;
-                slots.push(slot);
-            }
-        }
-
-        var pager = libSec.add("group");
-        pager.orientation = "row";
-        pager.alignChildren = ["fill", "center"];
-
-        var btnPrev = uiButton(pager, "‹", {width: 30, tip: "Página anterior"});
-        var pageText = uiLabel(pager, "");
-        pageText.alignment = ["fill", "center"];
-        pageText.justify = "center";
-        var btnNext = uiButton(pager, "›", {width: 30, tip: "Próxima página"});
+        var btnFav = uiButton(libRow, "★", {width: 28, tip: "Favoritar / desfavoritar (favoritas aparecem no topo)"});
 
         // ----- Editor -----
-        var edSec = uiSection(tab, "Editor");
-
-        var edRow = edSec.add("group");
+        var edRow = tab.add("group");
         edRow.orientation = "row";
         edRow.alignChildren = ["left", "top"];
         edRow.spacing = 8;
@@ -4253,13 +4143,54 @@
         var editor = edRow.add("group");
         editor.alignment = ["left", "top"];
         editor.preferredSize = [128, 128];
+        editor.helpTip = "Arraste as alças: as keyframes selecionadas mudam na hora. Shift arredonda.";
 
         var edSide = edRow.add("group");
         edSide.orientation = "column";
         edSide.alignment = ["fill", "top"];
         edSide.alignChildren = ["fill", "top"];
         edSide.spacing = 5;
-        editor.helpTip = "Arraste as alças. Shift arredonda os valores.";
+
+        function sideRow(label) {
+            var r = edSide.add("group");
+            r.orientation = "row";
+            r.alignChildren = ["fill", "center"];
+            var l = uiLabel(r, label);
+            l.preferredSize.width = 62;
+            return r;
+        }
+
+        var txtValues = sideRow("Bezier:").add("edittext", undefined, "");
+        txtValues.alignment = ["fill", "center"];
+        txtValues.helpTip = "x1, y1, x2, y2 — pode colar do cubic-bezier.com. Enter aplica.";
+
+        var infoText = uiLabel(edSide, "");
+        infoText.alignment = ["fill", "top"];
+        infoText.helpTip = "Influência das keyframes: quanto da curva cada alça puxa.";
+
+        var txtName = sideRow("Nome:").add("edittext", undefined, "");
+        txtName.alignment = ["fill", "center"];
+        txtName.characters = 12;
+
+        var txtCat = sideRow("Categoria:").add("edittext", undefined, "Minhas");
+        txtCat.alignment = ["fill", "center"];
+        txtCat.characters = 12;
+        txtCat.helpTip = "Digite uma categoria existente ou crie uma nova";
+
+        var manageRow = edSide.add("group");
+        manageRow.orientation = "row";
+        manageRow.alignChildren = ["fill", "center"];
+        manageRow.spacing = 4;
+
+        var btnSave = uiButton(manageRow, "Salvar", {tip: "Salva na biblioteca (atualiza se o nome já existir)"});
+        var btnDelete = uiButton(manageRow, "Excluir");
+
+        var cbLive = tab.add("checkbox", undefined, "Aplicar ao vivo nas keyframes selecionadas");
+        cbLive.value = loadSetting("curvesLive", "1") === "1";
+
+        var status = addStatus(tab, "Selecione keyframes e mexa no editor.");
+
+        // ----- desenho do editor -----
 
         function edBox() {
             var w = editor.size[0];
@@ -4271,6 +4202,8 @@
         function edY(v, b) { return b.y + b.h - (v - ED_RANGE[0]) / (ED_RANGE[1] - ED_RANGE[0]) * b.h; }
         function edInvX(px, b) { return (px - b.x) / b.w; }
         function edInvY(py, b) { return ED_RANGE[0] + (b.y + b.h - py) / b.h * (ED_RANGE[1] - ED_RANGE[0]); }
+
+        var drag = 0;
 
         editor.onDraw = function () {
             var g = this.graphics;
@@ -4284,7 +4217,6 @@
             var top = edY(1, b);
             var bottom = edY(0, b);
 
-            // área 0..1 e grade
             g.newPath();
             g.rectPath(edX(0, b), top, b.w, bottom - top);
             g.fillPath(uiBrush(g, THEME.grid));
@@ -4305,7 +4237,6 @@
             g.lineTo(edX(1, b), top);
             g.strokePath(uiPen(g, THEME.line, 1));
 
-            // alças
             var h1 = [edX(e.x1, b), edY(e.y1, b)];
             var h2 = [edX(e.x2, b), edY(e.y2, b)];
 
@@ -4336,7 +4267,87 @@
             }
         };
 
-        var drag = 0;
+        // ----- aplicar ao vivo -----
+
+        var live = {segments: null, skipped: 0, last: 0};
+
+        function now() {
+            return new Date().getTime();
+        }
+
+        function findSegments() {
+            var comp = app.project ? app.project.activeItem : null;
+            if (!isComp(comp)) return {segments: [], skipped: 0};
+            return collectCurveSegments(comp);
+        }
+
+        // Aplica a curva do editor nos trechos. Sem alertas: resultado vai no status.
+        function applyToSegments(segments) {
+            var ok = 0;
+            var failed = 0;
+
+            for (var i = 0; i < segments.length; i++) {
+                try {
+                    if (applyCurveToSegment(segments[i][0], segments[i][1], segments[i][2], lib.edit, "both")) ok++;
+                } catch (e) {
+                    failed++;
+                }
+            }
+
+            return {ok: ok, failed: failed};
+        }
+
+        function liveStatus(r, skipped) {
+            if (!cbLive.value) {
+                status.text = "Ao vivo desligado.";
+            } else if (!r || (r.ok === 0 && r.failed === 0)) {
+                status.text = "Selecione keyframes para ver a curva na timeline.";
+            } else {
+                status.text =
+                    "Ao vivo: " + r.ok + " trecho(s)" +
+                    (r.failed ? " | " + r.failed + " falharam" : "") +
+                    (skipped ? " | " + skipped + " propriedade(s) não suportada(s)" : "") + ".";
+            }
+        }
+
+        // Aplicação única (dropdown, campo Bezier): um Undo por mudança.
+        function applyOnce(undoName) {
+            if (!cbLive.value) {
+                liveStatus(null, 0);
+                return;
+            }
+
+            var found = findSegments();
+            if (found.segments.length === 0) {
+                liveStatus(null, 0);
+                return;
+            }
+
+            var r;
+            app.beginUndoGroup(undoName);
+            try {
+                r = applyToSegments(found.segments);
+            } finally {
+                app.endUndoGroup();
+            }
+
+            liveStatus(r, found.skipped);
+        }
+
+        // Cada atualização fecha o próprio Undo: nada fica aberto se o mouse
+        // for solto fora do painel.
+        function applyLive() {
+            var r;
+            app.beginUndoGroup("Mesmo Tools - Curva (arrastar)");
+            try {
+                r = applyToSegments(live.segments);
+            } finally {
+                app.endUndoGroup();
+            }
+            liveStatus(r, live.skipped);
+        }
+
+        // ----- mouse no editor -----
 
         editor.addEventListener("mousedown", function (ev) {
             var b = edBox();
@@ -4345,7 +4356,20 @@
             var d2 = Math.sqrt(Math.pow(ev.clientX - edX(e.x2, b), 2) + Math.pow(ev.clientY - edY(e.y2, b), 2));
 
             drag = Math.min(d1, d2) <= 12 ? (d1 <= d2 ? 1 : 2) : 0;
-            if (drag) uiRedraw(editor);
+            if (!drag) return;
+
+            // Pega as keyframes uma vez, no começo do arraste.
+            live.segments = null;
+
+            if (cbLive.value) {
+                var found = findSegments();
+                if (found.segments.length) {
+                    live.segments = found.segments;
+                    live.skipped = found.skipped;
+                }
+            }
+
+            uiRedraw(editor);
         });
 
         editor.addEventListener("mousemove", function (ev) {
@@ -4368,171 +4392,81 @@
                 lib.edit.y2 = round3(vy);
             }
 
+            lib.selected = null;
             syncEditorFields();
             uiRedraw(editor);
+
+            if (live.segments && now() - live.last >= LIVE_INTERVAL) {
+                live.last = now();
+                applyLive();
+            }
         });
 
         function endDrag() {
             if (!drag) return;
             drag = 0;
+
+            if (live.segments) applyLive(); // posição final exata
+            else liveStatus(null, 0);
+
+            live.segments = null;
             uiRedraw(editor);
         }
 
         editor.addEventListener("mouseup", endDrag);
         tab.addEventListener("mouseup", endDrag);
 
-        var valRow = edSide.add("group");
-        valRow.orientation = "row";
-        valRow.alignChildren = ["fill", "center"];
+        // ----- biblioteca -----
 
-        var lblBez = uiLabel(valRow, "Bezier:");
-        lblBez.preferredSize.width = 62;
-        var txtValues = valRow.add("edittext", undefined, "");
-        txtValues.alignment = ["fill", "center"];
-        txtValues.helpTip = "x1, y1, x2, y2 — pode colar direto do cubic-bezier.com";
+        function refreshDropdown() {
+            lib.busy = true;
+            ddCurves.removeAll();
+            lib.ddMap = [];
 
-        var infoText = uiLabel(edSide, "");
-        infoText.alignment = ["fill", "top"];
+            var pick = -1;
+            var i;
 
-        var nameRow = edSide.add("group");
-        nameRow.orientation = "row";
-        nameRow.alignChildren = ["fill", "center"];
+            function addItem(c, label) {
+                ddCurves.add("item", label);
+                lib.ddMap.push(c);
+                if (c && c.name === lib.selected) pick = lib.ddMap.length - 1;
+            }
 
-        var lblName = uiLabel(nameRow, "Nome:");
-        lblName.preferredSize.width = 62;
-        var txtName = nameRow.add("edittext", undefined, "");
-        txtName.alignment = ["fill", "center"];
-        txtName.characters = 12;
+            function addSeparator() {
+                ddCurves.add("separator");
+                lib.ddMap.push(null);
+            }
 
-        var catRow = edSide.add("group");
-        catRow.orientation = "row";
-        catRow.alignChildren = ["fill", "center"];
+            addItem(null, lib.selected ? "— curva personalizada —" : "— escolha uma curva —");
 
-        var lblCat = uiLabel(catRow, "Categoria:");
-        lblCat.preferredSize.width = 62;
-        var txtCat = catRow.add("edittext", undefined, "Minhas");
-        txtCat.alignment = ["fill", "center"];
-        txtCat.characters = 12;
-        txtCat.helpTip = "Digite uma categoria existente ou crie uma nova";
+            var favs = [];
+            for (i = 0; i < curves.length; i++) if (curves[i].fav) favs.push(curves[i]);
 
-        var manageRow = edSec.add("group");
-        manageRow.orientation = "row";
-        manageRow.alignChildren = ["fill", "center"];
-        manageRow.spacing = 4;
+            if (favs.length) {
+                addSeparator();
+                for (i = 0; i < favs.length; i++) addItem(favs[i], "★ " + favs[i].name);
+            }
 
-        var btnNew = uiButton(manageRow, "Nova", {tip: "Limpa o editor para uma curva nova"});
-        var btnSave = uiButton(manageRow, "Salvar", {tip: "Salva (ou atualiza, se o nome já existir)"});
-        var btnFav = uiButton(manageRow, "★", {width: 30, tip: "Favoritar / desfavoritar"});
-        var btnLeft = uiButton(manageRow, "◀", {width: 26, tip: "Mover para trás na lista"});
-        var btnRight = uiButton(manageRow, "▶", {width: 26, tip: "Mover para frente na lista"});
-        var btnDelete = uiButton(manageRow, "Excluir");
-
-        // ----- Aplicar -----
-        var applySec = uiSection(tab, "Aplicar");
-
-        var modeRow = applySec.add("group");
-        modeRow.orientation = "row";
-        modeRow.alignChildren = ["fill", "center"];
-
-        var btnCapture = uiButton(modeRow, "Capturar das keys", {
-            tip: "Lê a curva entre as duas keyframes selecionadas"
-        });
-        var ddMode = modeRow.add("dropdownlist", undefined, [
-            "Entrada e saída",
-            "Só saída (1ª key)",
-            "Só entrada (2ª key)"
-        ]);
-        ddMode.selection = 0;
-
-        var btnApply = uiButton(applySec, "APLICAR NAS KEYFRAMES", {primary: true});
-
-        var ioRow = applySec.add("group");
-        ioRow.orientation = "row";
-        ioRow.alignChildren = ["fill", "center"];
-        ioRow.spacing = 4;
-
-        var btnImport = uiButton(ioRow, "Importar…", {tip: "Junta curvas de um arquivo .txt"});
-        var btnExport = uiButton(ioRow, "Exportar…", {tip: "Salva sua biblioteca num .txt para backup ou para compartilhar"});
-        var btnRestore = uiButton(ioRow, "Restaurar padrões", {tip: "Recoloca as curvas que vêm com o painel (não apaga as suas)"});
-
-        var status = addStatus(tab, "Clique numa curva para editar. Alt+clique aplica direto.");
-
-        // ----- lógica -----
-
-        function categories() {
+            var cats = [];
             var seen = {};
-            var out = [];
-            for (var i = 0; i < curves.length; i++) {
+            for (i = 0; i < curves.length; i++) {
                 if (!seen["k" + curves[i].cat]) {
                     seen["k" + curves[i].cat] = true;
-                    out.push(curves[i].cat);
+                    cats.push(curves[i].cat);
                 }
             }
-            return out;
-        }
 
-        function refreshCategories() {
-            lib.busy = true;
-            ddCat.removeAll();
-
-            var names = [ALL, FAVS].concat(categories());
-            var pick = 0;
-
-            for (var i = 0; i < names.length; i++) {
-                ddCat.add("item", names[i]);
-                if (names[i] === lib.cat) pick = i;
+            for (var c = 0; c < cats.length; c++) {
+                addSeparator();
+                for (i = 0; i < curves.length; i++) {
+                    if (curves[i].cat === cats[c] && !curves[i].fav) {
+                        addItem(curves[i], cats[c] + "  ·  " + curves[i].name);
+                    }
+                }
             }
 
-            ddCat.selection = pick;
-            lib.cat = names[pick];
+            ddCurves.selection = pick === -1 ? 0 : pick;
             lib.busy = false;
-        }
-
-        function filteredCurves() {
-            var q = trimString(txtFind.text).toLowerCase();
-            var out = [];
-
-            for (var i = 0; i < curves.length; i++) {
-                var c = curves[i];
-                if (lib.cat === FAVS && !c.fav) continue;
-                if (lib.cat !== ALL && lib.cat !== FAVS && c.cat !== lib.cat) continue;
-                if (q !== "" && c.name.toLowerCase().indexOf(q) === -1) continue;
-                out.push(c);
-            }
-
-            return out;
-        }
-
-        function refreshGrid() {
-            var list = filteredCurves();
-            var pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
-
-            if (lib.page >= pages) lib.page = pages - 1;
-            if (lib.page < 0) lib.page = 0;
-
-            for (var i = 0; i < slots.length; i++) {
-                var c = list[lib.page * PER_PAGE + i] || null;
-                slots[i].mesmoCurve = c;
-                slots[i].helpTip = c ? (c.name + "  [" + c.cat + "]\n" + curveValuesText(c)) : "";
-            }
-
-            lib.pages = pages;
-            lib.count = list.length;
-            updatePagerText();
-
-            btnPrev.enabled = lib.page > 0;
-            btnNext.enabled = lib.page < pages - 1;
-
-            uiRedraw(grid);
-            uiRedraw(btnPrev);
-            uiRedraw(btnNext);
-        }
-
-        function updatePagerText() {
-            pageText.text =
-                (lib.selected ? lib.selected + "   ·   " : "") +
-                (lib.page + 1) + "/" + (lib.pages || 1) + "   ·   " +
-                (lib.count || 0) + (lib.count === 1 ? " curva" : " curvas");
         }
 
         function syncEditorFields() {
@@ -4541,7 +4475,6 @@
             infoText.text =
                 "Saída " + Math.round(e.x1 * 100) +
                 "%  ·  entrada " + Math.round((1 - e.x2) * 100) + "%";
-            infoText.helpTip = "Influência das keyframes: quanto da curva cada alça puxa.";
         }
 
         function loadIntoEditor(c) {
@@ -4550,10 +4483,12 @@
                 ? makeCurve(c.name, c.cat, c.x1, c.y1, c.x2, c.y2, c.fav)
                 : makeCurve("", txtCat.text || "Minhas", 0.333, 0, 0.667, 1, false);
 
-            txtName.text = lib.edit.name;
-            txtCat.text = lib.edit.cat;
+            if (c) {
+                txtName.text = c.name;
+                txtCat.text = c.cat;
+            }
+
             syncEditorFields();
-            updatePagerText();
             uiRedraw(editor);
         }
 
@@ -4561,89 +4496,15 @@
             return writeCurveFile(getCurveStoreFile(), curves);
         }
 
-        function selectedIndex() {
-            return lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
-        }
+        ddCurves.onChange = function () {
+            if (lib.busy || !ddCurves.selection) return;
 
-        function applyCurve(c) {
-            var comp = app.project ? app.project.activeItem : null;
-
-            if (!isComp(comp)) {
-                alert("Abra uma composição e selecione as keyframes.");
-                return;
-            }
-
-            var found = collectCurveSegments(comp);
-
-            if (found.segments.length === 0) {
-                alert(
-                    "Selecione pelo menos duas keyframes vizinhas " +
-                    "(ou uma keyframe que tenha outra depois dela)." +
-                    (found.skipped ? "\n\nPaths, textos e propriedades sem valor numérico não são suportados." : "")
-                );
-                return;
-            }
-
-            var modeIdx = ddMode.selection ? ddMode.selection.index : 0;
-            var mode = modeIdx === 1 ? "out" : (modeIdx === 2 ? "in" : "both");
-            var ok = 0;
-            var errors = [];
-
-            app.beginUndoGroup("Mesmo Tools - Curva " + (c.name || ""));
-
-            try {
-                for (var i = 0; i < found.segments.length; i++) {
-                    var seg = found.segments[i];
-                    try {
-                        if (applyCurveToSegment(seg[0], seg[1], seg[2], c, mode)) ok++;
-                    } catch (e) {
-                        var pn = "Propriedade";
-                        try { pn = seg[0].name; } catch (nErr) {}
-                        errors.push(pn + ": " + e.toString().replace("Error: ", ""));
-                    }
-                }
-            } finally {
-                app.endUndoGroup();
-            }
-
-            status.text =
-                (c.name ? "\"" + c.name + "\" " : "Curva ") + "aplicada em " +
-                ok + " trecho(s)" +
-                (found.skipped ? " | " + found.skipped + " propriedade(s) ignorada(s)" : "") +
-                (errors.length ? " | " + errors.length + " erro(s)" : "") + ".";
-
-            if (errors.length) alert("Alguns trechos falharam:\n\n" + errors.join("\n"));
-        }
-
-        function onThumbClick() {
-            var c = this.mesmoCurve;
+            var c = lib.ddMap[ddCurves.selection.index];
             if (!c) return;
 
             loadIntoEditor(c);
-            uiRedraw(grid);
-
-            var alt = false;
-            try { alt = ScriptUI.environment.keyboardState.altKey; } catch (e) {}
-
-            if (alt) applyCurve(c);
-            else status.text = "Carregada: " + c.name + "  (" + curveValuesText(c) + ")";
-        }
-
-        ddCat.onChange = function () {
-            if (lib.busy || !ddCat.selection) return;
-            lib.cat = ddCat.selection.text;
-            lib.page = 0;
-            saveSetting("curvesCategory", lib.cat);
-            refreshGrid();
+            applyOnce("Mesmo Tools - Curva " + c.name);
         };
-
-        txtFind.onChanging = function () {
-            lib.page = 0;
-            refreshGrid();
-        };
-
-        btnPrev.onClick = function () { lib.page--; refreshGrid(); };
-        btnNext.onClick = function () { lib.page++; refreshGrid(); };
 
         txtValues.onChange = function () {
             var v = parseCurveValues(txtValues.text);
@@ -4656,14 +4517,16 @@
 
             var e = lib.edit;
             lib.edit = makeCurve(e.name, e.cat, v[0], v[1], v[2], v[3], e.fav);
+            lib.selected = null;
             syncEditorFields();
             uiRedraw(editor);
+            applyOnce("Mesmo Tools - Curva");
         };
 
-        btnNew.onClick = function () {
-            loadIntoEditor(null);
-            uiRedraw(grid);
-            status.text = "Curva nova: arraste as alças, dê um nome e salve.";
+        cbLive.onClick = function () {
+            saveSetting("curvesLive", cbLive.value ? "1" : "0");
+            if (cbLive.value) applyOnce("Mesmo Tools - Curva");
+            else liveStatus(null, 0);
         };
 
         btnSave.onClick = function () {
@@ -4677,7 +4540,7 @@
 
             var e = lib.edit;
             var idx = findCurveIndex(curves, name);
-            var fav = idx !== -1 ? curves[idx].fav : e.fav;
+            var fav = idx !== -1 ? curves[idx].fav : false;
             var c = makeCurve(name, cat, e.x1, e.y1, e.x2, e.y2, fav);
 
             if (idx === -1) curves.push(c);
@@ -4686,56 +4549,29 @@
             if (persist()) {
                 lib.selected = name;
                 lib.edit = makeCurve(name, cat, c.x1, c.y1, c.x2, c.y2, fav);
-                refreshCategories();
-                refreshGrid();
+                refreshDropdown();
                 status.text = (idx === -1 ? "Curva salva: " : "Curva atualizada: ") + name;
             }
         };
 
         btnFav.onClick = function () {
-            var idx = selectedIndex();
+            var idx = lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
             if (idx === -1) {
-                alert("Selecione uma curva salva.");
+                alert("Escolha (ou salve) uma curva da biblioteca primeiro.");
                 return;
             }
 
             curves[idx].fav = !curves[idx].fav;
             if (persist()) {
-                refreshGrid();
-                status.text = curves[idx].fav ? "Adicionada às favoritas." : "Removida das favoritas.";
+                refreshDropdown();
+                status.text = curves[idx].fav ? "Favoritada: " + curves[idx].name : "Desfavoritada: " + curves[idx].name;
             }
         };
 
-        function moveSelected(step) {
-            var idx = selectedIndex();
-            if (idx === -1) return;
-
-            // Move até a próxima curva visível no filtro atual.
-            var list = filteredCurves();
-            var pos = -1;
-            for (var i = 0; i < list.length; i++) if (list[i].name === lib.selected) pos = i;
-
-            var target = list[pos + step];
-            if (!target) return;
-
-            var tIdx = findCurveIndex(curves, target.name);
-            var tmp = curves[idx];
-            curves[idx] = curves[tIdx];
-            curves[tIdx] = tmp;
-
-            if (persist()) {
-                lib.page = Math.floor((pos + step) / PER_PAGE);
-                refreshGrid();
-            }
-        }
-
-        btnLeft.onClick = function () { moveSelected(-1); };
-        btnRight.onClick = function () { moveSelected(1); };
-
         btnDelete.onClick = function () {
-            var idx = selectedIndex();
+            var idx = lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
             if (idx === -1) {
-                alert("Selecione uma curva salva para excluir.");
+                alert("Escolha uma curva da biblioteca para excluir.");
                 return;
             }
 
@@ -4744,115 +4580,15 @@
 
             curves.splice(idx, 1);
             if (persist()) {
-                loadIntoEditor(null);
-                refreshCategories();
-                refreshGrid();
+                lib.selected = null;
+                refreshDropdown();
                 status.text = "Curva excluída: " + name;
             }
         };
 
-        btnCapture.onClick = function () {
-            var comp = app.project ? app.project.activeItem : null;
-            if (!isComp(comp)) {
-                alert("Abra uma composição e selecione duas keyframes.");
-                return;
-            }
-
-            var found = collectCurveSegments(comp);
-            if (found.segments.length === 0) {
-                alert("Selecione duas keyframes vizinhas de uma propriedade.");
-                return;
-            }
-
-            try {
-                var seg = found.segments[0];
-                var v = captureCurveFromSegment(seg[0], seg[1], seg[2]);
-                var e = lib.edit;
-
-                lib.selected = null;
-                lib.edit = makeCurve(e.name, e.cat, v.x1, v.y1, v.x2, v.y2, false);
-                if (trimString(txtName.text) === "") txtName.text = "Capturada";
-
-                syncEditorFields();
-                uiRedraw(editor);
-                uiRedraw(grid);
-                status.text = "Curva capturada de \"" + seg[0].name + "\". Dê um nome e salve.";
-            } catch (err) {
-                alert(err.toString().replace("Error: ", ""));
-            }
-        };
-
-        btnApply.onClick = function () {
-            applyCurve(lib.edit);
-        };
-
-        btnExport.onClick = function () {
-            var f = File.saveDialog("Exportar curvas do Mesmo Tools", "Texto:*.txt");
-            if (!f) return;
-            if (!/\.txt$/i.test(f.name)) f = new File(f.fsName + ".txt");
-
-            if (writeCurveFile(f, curves)) {
-                status.text = curves.length + " curva(s) exportada(s).";
-            }
-        };
-
-        btnImport.onClick = function () {
-            var f = File.openDialog("Importar curvas", "Texto:*.txt");
-            if (!f) return;
-
-            var incoming = readCurveFile(f);
-            if (!incoming || incoming.length === 0) {
-                alert("Nenhuma curva válida encontrada nesse arquivo.");
-                return;
-            }
-
-            var added = 0;
-            var updated = 0;
-
-            for (var i = 0; i < incoming.length; i++) {
-                var idx = findCurveIndex(curves, incoming[i].name);
-                if (idx === -1) {
-                    curves.push(incoming[i]);
-                    added++;
-                } else {
-                    curves[idx] = incoming[i];
-                    updated++;
-                }
-            }
-
-            if (persist()) {
-                refreshCategories();
-                refreshGrid();
-                status.text = added + " nova(s), " + updated + " atualizada(s).";
-            }
-        };
-
-        btnRestore.onClick = function () {
-            var defs = defaultCurves();
-            var added = 0;
-
-            for (var i = 0; i < defs.length; i++) {
-                if (findCurveIndex(curves, defs[i].name) === -1) {
-                    curves.push(defs[i]);
-                    added++;
-                }
-            }
-
-            if (added === 0) {
-                status.text = "Todas as curvas padrão já estão na biblioteca.";
-                return;
-            }
-
-            if (persist()) {
-                refreshCategories();
-                refreshGrid();
-                status.text = added + " curva(s) padrão restaurada(s).";
-            }
-        };
-
-        refreshCategories();
-        refreshGrid();
+        refreshDropdown();
         loadIntoEditor(null);
+
     }
 
     function buildUI(thisObj) {
