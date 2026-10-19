@@ -4885,30 +4885,7 @@
         return layer;
     }
 
-    // ---------- null no atributo ----------
-
-    function hasAncestorMatch(prop, matchName) {
-        var p = prop.parentProperty;
-        while (p) {
-            if (p.matchName === matchName) return true;
-            p = p.parentProperty;
-        }
-        return false;
-    }
-
-    // Position da camada ou ponto de efeito (2D/3D espacial).
-    function nullTargetKind(p) {
-        try {
-            if (p.propertyType !== PropertyType.PROPERTY) return null;
-
-            var vt = p.propertyValueType;
-            if (vt !== PropertyValueType.TwoD_SPATIAL && vt !== PropertyValueType.ThreeD_SPATIAL) return null;
-
-            if (p.matchName === "ADBE Position") return "position";
-            if (hasAncestorMatch(p, "ADBE Effect Parade")) return "effectPoint";
-        } catch (e) {}
-        return null;
-    }
+    // ---------- null na position ----------
 
     function exprLayerRef(name) {
         return "thisComp.layer(\"" + String(name).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\")";
@@ -4920,55 +4897,111 @@
         return "[" + parts.join(", ") + "]";
     }
 
-    // Converte um valor do atributo para coordenada da comp no tempo t,
-    // usando o próprio After (expressão temporária no null).
-    function worldPointAt(nullLayer, srcLayer, kind, value, t, keep3D) {
+    // Converte o valor da Position (espaço do parent) para a comp no tempo t,
+    // usando o próprio After (expressão temporária no null). Devolve [x, y, z].
+    function worldPositionAt(nullLayer, srcLayer, value, t) {
         var pos = nullLayer.property("ADBE Transform Group").property("ADBE Position");
-        var L = "thisComp.layer(" + srcLayer.index + ")";
         var v = arrayLiteral(value);
-        var expr = kind === "position"
-            ? "var L = " + L + "; var r = L.hasParent ? L.parent.toComp(" + v + ") : " + v + ";"
-            : "var r = " + L + ".toComp(" + v + ");";
 
-        expr += keep3D ? " [r[0], r[1], (r.length > 2 ? r[2] : 0)]" : " [r[0], r[1]]";
+        pos.expression =
+            "var L = thisComp.layer(" + srcLayer.index + ");" +
+            " var r = L.hasParent ? L.parent.toComp(" + v + ") : " + v + ";" +
+            (nullLayer.threeDLayer ? " [r[0], r[1], (r.length > 2 ? r[2] : 0)]" : " [r[0], r[1]]");
 
-        pos.expression = expr;
         var out = pos.valueAtTime(t, false);
         pos.expression = "";
-        return out;
+        return [out[0], out[1], out.length > 2 ? out[2] : 0];
     }
 
-    function createNullForProperty(p) {
-        var kind = nullTargetKind(p);
-        if (!kind) return {error: "não é Position nem ponto de efeito"};
+    // Position combinada + as partes X/Y/Z quando as dimensões estão separadas.
+    function positionPropsOf(layer) {
+        var tg = layer.property("ADBE Transform Group");
+        var pos = tg.property("ADBE Position");
+        var parts = null;
 
-        var layer = p.propertyGroup(p.propertyDepth);
-        var comp = layer.containingComp;
+        if (pos.dimensionsSeparated) {
+            parts = [tg.property("ADBE Position_0"), tg.property("ADBE Position_1")];
+            if (layer.threeDLayer) parts.push(tg.property("ADBE Position_2"));
+        }
+
+        return {combined: pos, parts: parts};
+    }
+
+    // Camadas selecionadas + donas de uma Position selecionada na timeline.
+    function layersForNull(comp) {
+        var out = [];
+        var i;
+
+        function add(l) {
+            for (var k = 0; k < out.length; k++) if (out[k] === l) return;
+            out.push(l);
+        }
+
+        var ls = comp.selectedLayers;
+        for (i = 0; i < ls.length; i++) add(ls[i]);
+
+        var props = selectedPropertiesOf(comp);
+        for (i = 0; i < props.length; i++) {
+            try {
+                if (String(props[i].matchName).indexOf("ADBE Position") === 0) {
+                    add(props[i].propertyGroup(props[i].propertyDepth));
+                }
+            } catch (e) {}
+        }
+
+        // só camadas que têm Position
+        var valid = [];
+        for (i = 0; i < out.length; i++) {
+            try {
+                if (out[i].property("ADBE Transform Group").property("ADBE Position")) valid.push(out[i]);
+            } catch (e2) {}
+        }
+        return valid;
+    }
+
+    /*
+        Cria UM null para todas as camadas.
+        - 1 camada com keyframes na Position: a animação passa para o null e a
+          Position segue o null exatamente.
+        - Demais casos: o null nasce no centro das camadas; cada Position mantém
+          a própria animação e soma o quanto o null se mexer.
+    */
+    function createPositionNull(comp, layers) {
         var t = comp.time;
-        var is3D = false;
-        try { is3D = layer.threeDLayer; } catch (e3) {}
+        var any3D = false;
+        var top = layers[0];
+        var i;
 
-        var dims = p.value.length;
-        var propLabel = String(p.name).toLowerCase().replace(/\s+/g, "-");
+        for (i = 0; i < layers.length; i++) {
+            if (layers[i].threeDLayer) any3D = true;
+            if (layers[i].index < top.index) top = layers[i];
+        }
+
+        var baseName = layers.length === 1
+            ? layers[0].name
+            : layers[0].name + "+" + (layers.length - 1);
 
         var nul = comp.layers.addNull(comp.duration);
-        nul.name = uniqueLayerName(comp, layer.name + "-" + propLabel + "-null");
-        if (is3D) nul.threeDLayer = true;
+        nul.name = uniqueLayerName(comp, baseName + "-position-null");
+        if (any3D) nul.threeDLayer = true;
         try { nul.label = 9; } catch (eLb) {}
-
-        try { nul.moveBefore(layer); } catch (eMv) {}
+        try { nul.moveBefore(top); } catch (eMv) {}
 
         var npos = nul.property("ADBE Transform Group").property("ADBE Position");
+        var ref = exprLayerRef(nul.name);
+        var first = positionPropsOf(layers[0]);
+        var k;
 
-        // Leva a animação junto: cada keyframe vira keyframe do null.
-        if (p.numKeys > 0) {
+        // 1 camada animada: leva os keyframes para o null
+        if (layers.length === 1 && !first.parts && first.combined.numKeys > 0) {
+            var p = first.combined;
             var times = [];
             var values = [];
-            var k;
 
             for (k = 1; k <= p.numKeys; k++) {
+                var w = worldPositionAt(nul, layers[0], p.keyValue(k), p.keyTime(k));
                 times.push(p.keyTime(k));
-                values.push(worldPointAt(nul, layer, kind, p.keyValue(k), p.keyTime(k), is3D));
+                values.push(any3D ? w : [w[0], w[1]]);
             }
 
             npos.setValuesAtTimes(times, values);
@@ -4979,23 +5012,50 @@
                     npos.setTemporalEaseAtKey(k, p.keyInTemporalEase(k), p.keyOutTemporalEase(k));
                 } catch (eEase) {}
             }
-        } else {
-            npos.setValue(worldPointAt(nul, layer, kind, p.valueAtTime(t, false), t, is3D));
+
+            p.expression =
+                "// Segue o null " + nul.name + " (Mesmo Tools)\n" +
+                "var n = " + ref + ";\n" +
+                "var p = n.toComp(n.anchorPoint);\n" +
+                "var r = hasParent ? parent.fromComp(p) : p;\n" +
+                (p.value.length > 2 ? "r;" : "[r[0], r[1]];");
+
+            return nul;
         }
 
-        var trim = dims > 2 ? "r" : "[r[0], r[1]]";
-        var link = kind === "position"
-            ? "// Linkado ao null " + nul.name + " (Mesmo Tools)\n" +
-              "var n = " + exprLayerRef(nul.name) + ";\n" +
-              "var p = n.toComp(n.anchorPoint);\n" +
-              "var r = hasParent ? parent.fromComp(p) : p;\n" + trim + ";"
-            : "// Linkado ao null " + nul.name + " (Mesmo Tools)\n" +
-              "var n = " + exprLayerRef(nul.name) + ";\n" +
-              "var r = fromComp(n.toComp(n.anchorPoint));\n" + trim + ";";
+        // null no centro das posições atuais
+        var sum = [0, 0, 0];
+        for (i = 0; i < layers.length; i++) {
+            var wp = worldPositionAt(nul, layers[i], positionPropsOf(layers[i]).combined.valueAtTime(t, false), t);
+            sum[0] += wp[0];
+            sum[1] += wp[1];
+            sum[2] += wp[2];
+        }
 
-        p.expression = link;
+        var c = [sum[0] / layers.length, sum[1] / layers.length, sum[2] / layers.length];
+        npos.setValue(any3D ? c : [c[0], c[1]]);
 
-        return {nullLayer: nul, error: null};
+        var head =
+            "// Segue o null " + nul.name + " (Mesmo Tools)\n" +
+            "var n = " + ref + ";\n" +
+            "var q = n.toComp(n.anchorPoint);\n" +
+            "var d = [q[0] - " + c[0] + ", q[1] - " + c[1] + ", (q.length > 2 ? q[2] : 0) - " + (any3D ? c[2] : 0) + "];\n" +
+            "var v = hasParent ? parent.fromCompVec(d) : d;\n";
+
+        for (i = 0; i < layers.length; i++) {
+            var pp = positionPropsOf(layers[i]);
+
+            if (pp.parts) {
+                for (k = 0; k < pp.parts.length; k++) {
+                    pp.parts[k].expression = head + "value + v[" + k + "];";
+                }
+            } else {
+                pp.combined.expression = head +
+                    (pp.combined.value.length > 2 ? "value + [v[0], v[1], v[2]];" : "value + [v[0], v[1]];");
+            }
+        }
+
+        return nul;
     }
 
     // Propriedades selecionadas na comp ativa (sem repetir).
@@ -5284,9 +5344,9 @@
             }
         }
 
-        var btnNull = uiButton(tab, "NULL NO ATRIBUTO", {
+        var btnNull = uiButton(tab, "NULL NA POSITION", {
             primary: true,
-            tip: "Selecione a Position (ou um ponto de efeito) de uma ou mais camadas: cria um null no ponto exato e linka o atributo nele."
+            tip: "Selecione uma ou mais camadas: cria um null no ponto delas e linka a Position ao null. Várias camadas = um único null que move todas."
         });
 
         status = addStatus(tab, "Clique para criar na comp aberta.");
@@ -5295,42 +5355,27 @@
             var comp = activeCompOrAlert();
             if (!comp) return;
 
-            var props = selectedPropertiesOf(comp);
-            var targets = [];
-            for (var i = 0; i < props.length; i++) if (nullTargetKind(props[i])) targets.push(props[i]);
-
-            if (targets.length === 0) {
-                alert(
-                    "Selecione a Position de uma camada (clique no nome \"Position\" na timeline) " +
-                    "ou um ponto de efeito.\n\nCom as dimensões separadas, junte X e Y antes."
-                );
+            var layers = layersForNull(comp);
+            if (layers.length === 0) {
+                alert("Selecione uma ou mais camadas.");
                 return;
             }
 
-            var made = [];
-            var errors = [];
-
-            app.beginUndoGroup("Mesmo Tools - Null no atributo");
+            var nul = null;
+            app.beginUndoGroup("Mesmo Tools - Null na position");
             try {
-                for (i = 0; i < targets.length; i++) {
-                    try {
-                        var res = createNullForProperty(targets[i]);
-                        if (res.error) errors.push(targets[i].name + ": " + res.error);
-                        else made.push(res.nullLayer);
-                    } catch (e) {
-                        errors.push(targets[i].name + ": " + e.toString().replace("Error: ", ""));
-                    }
-                }
-                if (made.length) selectOnly(comp, made);
+                nul = createPositionNull(comp, layers);
+                selectOnly(comp, [nul]);
+            } catch (e) {
+                alert("Não foi possível criar o null:\n" + e.toString().replace("Error: ", ""));
             } finally {
                 app.endUndoGroup();
             }
 
-            status.text = made.length === 1
-                ? "Null criado: " + made[0].name
-                : made.length + " null(s) criado(s).";
-
-            if (errors.length) alert("Alguns atributos falharam:\n\n" + errors.join("\n"));
+            if (nul) {
+                status.text = "Null criado: " + nul.name +
+                    (layers.length > 1 ? " (" + layers.length + " camadas)" : "");
+            }
         };
     }
 
