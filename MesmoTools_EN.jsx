@@ -1033,8 +1033,7 @@
 
             if (errors.length === 0) {
                 status.text =
-                    success + " comp" + (success === 1 ? "" : "s") +
-                    " updated" + (success === 1 ? "" : "s") + ".";
+                    success + (success === 1 ? " comp updated." : " comps updated.");
             } else {
                 status.text =
                     success + " updated, " + errors.length + " with errors.";
@@ -4806,8 +4805,9 @@
 
         try {
             if (kind === "text") {
+                var textName = uniqueLayerName(comp, "Text");
                 layer = comp.layers.addText("Text");
-                layer.name = uniqueLayerName(comp, "Text");
+                layer.name = textName;
             } else if (kind === "adjustment") {
                 layer = comp.layers.addSolid([1, 1, 1], uniqueLayerName(comp, "Adjustment Layer"),
                     w, h, comp.pixelAspect, comp.duration);
@@ -5952,6 +5952,53 @@
         return win;
     }
 
+    /*
+        Dentro de painéis, o After às vezes engole erros dos botões e a ação
+        simplesmente "não acontece". Aqui todo handler ganha um try/catch que
+        mostra a mensagem exata (com a linha) para dar para corrigir.
+    */
+    function reportUIError(ctrl, e) {
+        var label = "";
+        try { label = ctrl.text || ctrl.helpTip || ctrl.type; } catch (eL) {}
+        try { app.endUndoGroup(); } catch (eU) {}
+
+        alert(
+            SCRIPT_NAME + " — something went wrong in \"" + String(label).substring(0, 60) + "\":\n\n" +
+            (e && e.message ? e.message : String(e)) +
+            (e && e.line ? "\n(line " + e.line + ")" : "")
+        );
+    }
+
+    function guardHandlers(container) {
+        var kids = container.children;
+        var events = ["onClick", "onChange", "onChanging", "onDoubleClick"];
+
+        for (var i = 0; i < kids.length; i++) {
+            var k = kids[i];
+
+            for (var j = 0; j < events.length; j++) {
+                var fn = k[events[j]];
+                if (typeof fn === "function" && !fn.mesmoGuarded) {
+                    k[events[j]] = (function (ctrl, f) {
+                        var g = function () {
+                            try {
+                                return f.apply(this, arguments);
+                            } catch (e) {
+                                reportUIError(ctrl, e);
+                            }
+                        };
+                        g.mesmoGuarded = true;
+                        return g;
+                    })(k, fn);
+                }
+            }
+
+            try {
+                if (k.children && k.children.length) guardHandlers(k);
+            } catch (eC) {}
+        }
+    }
+
     // API para outros scripts / KBar:
     // explodeMesmo({split: "words", deleteOriginal: true, layerOrder: "topToBottom"})
     $.global.explodeMesmo = function (options) {
@@ -5966,6 +6013,7 @@
     };
 
     var panel = buildUI(thisObj);
+    try { guardHandlers(panel); } catch (eGuard) {}
 
     if (panel instanceof Window) {
         panel.center();

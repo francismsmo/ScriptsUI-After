@@ -87,7 +87,8 @@ TR = {
     "O After Effects não aceitou ": "After Effects did not accept ",
     " fps nesta composição.": " fps in this composition.",
     " não está disponível nesta instalação do After Effects.": " is not available in this After Effects installation.",
-    " atualizada": " updated",
+    " comp atualizada.": " comp updated.",
+    " comps atualizadas.": " comps updated.",
     " atualizada(s), ": " updated, ",
     " com erro.": " with errors.",
     "Processo concluído com alguns erros:\\n\\n": "Finished with some errors:\\n\\n",
@@ -331,6 +332,11 @@ TR = {
     "Mesmo Tools - Marcar batidas": "Mesmo Tools - Mark beats",
     "Não foi possível analisar.": "Could not analyze.",
     " batida(s) marcada(s) em \\\"": " beat(s) marked on \\\"",
+
+    # ---- erros
+    " — algo deu errado em \\\"": " — something went wrong in \\\"",
+    "\\\":\\n\\n": "\\\":\\n\\n",
+    "\\n(linha ": "\\n(line ",
 
     # ---- navegação
     "Animação": "Animation",
