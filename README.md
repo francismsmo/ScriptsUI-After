@@ -51,7 +51,7 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 - **Aplicar ao vivo:** desmarque se quiser só desenhar a curva sem mexer nas keys.
 - Cada atualização entra no Undo; enquanto você arrasta, o After registra alguns passos por segundo.
 
-Funciona em propriedades numéricas (posição, escala, rotação, opacidade, cor, efeitos…). Paths de máscara/shape e Source Text não são suportados.
+Funciona em qualquer propriedade que aceite ease: posição, escala, rotação, opacidade, cor, parâmetros de efeito e também **paths de máscara e de shape**. Para paths, a velocidade média do trecho é lida do próprio After. Só ficam de fora as que o After deixa apenas em Hold, como Source Text.
 Em **Position** com caminho espacial, curvas que passam do limite (tipo *Back*) não ultrapassam o ponto final. Para esse efeito, use **Separate Dimensions**.
 
 ## Atalhos de expressões

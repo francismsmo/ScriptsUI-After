@@ -35,6 +35,10 @@
       do editor solta a alça; campos acompanham a largura do painel.
     - Desempenho: recolher/expandir e trocar de aba recalculam só a aba
       ativa; medidas de texto em cache; resize mais leve.
+    - Curvas: arrastar mais leve (cada trecho é preparado uma vez no
+      clique; no arraste só o ease é reaplicado, e só quando muda);
+      agora funciona em paths de máscara/shape e outros parâmetros que
+      aceitam ease (velocidade média lida do próprio After).
     - Barra de rolagem: o painel pode ficar pequeno e o conteúdo rola
       (cabeçalho e abas fixos); cada aba rola só o próprio conteúdo.
     - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
@@ -3983,6 +3987,8 @@
 
     // ---------- conversão bezier <-> keyframes do AE ----------
 
+    // Fica de fora só o que o After não deixa ter ease (só Hold).
+    // Paths de máscara/shape, cores e parâmetros de efeito entram.
     function isCurveCompatibleProperty(p) {
         try {
             if (p.propertyType !== PropertyType.PROPERTY) return false;
@@ -3991,8 +3997,6 @@
             var vt = p.propertyValueType;
             if (
                 vt === PropertyValueType.NO_VALUE ||
-                vt === PropertyValueType.CUSTOM_VALUE ||
-                vt === PropertyValueType.SHAPE ||
                 vt === PropertyValueType.TEXT_DOCUMENT ||
                 vt === PropertyValueType.MARKER ||
                 vt === PropertyValueType.LAYER_INDEX ||
@@ -4034,19 +4038,62 @@
     }
 
     /*
+        Velocidade média do trecho por dimensão, nas unidades do After.
+        - Números/vetores: (v2 - v1) / tempo.
+        - Paths de máscara e de shape (e outros tipos sem número): o próprio
+          After calcula. O trecho fica linear por um instante e a velocidade
+          que ele mostra é a média.
+    */
+    function segmentAverageSpeeds(prop, k1, k2, easeLen, dt) {
+        var out = [];
+        var d;
+        var deltas = keyDeltas(prop, k1, k2, easeLen);
+
+        if (deltas) {
+            for (d = 0; d < easeLen; d++) out.push(deltas[d] / dt);
+            return out;
+        }
+
+        var LIN = KeyframeInterpolationType.LINEAR;
+        prop.setInterpolationTypeAtKey(k1, prop.keyInInterpolationType(k1), LIN);
+        prop.setInterpolationTypeAtKey(k2, LIN, prop.keyOutInterpolationType(k2));
+
+        var e = prop.keyOutTemporalEase(k1);
+        for (d = 0; d < easeLen; d++) out.push(e[d] ? e[d].speed : 0);
+        return out;
+    }
+
+    /*
+        Prepara um trecho UMA vez (no clique): interpolação Bezier, sem
+        auto-bezier/continuous e velocidade média. Durante o arraste só o
+        ease é reaplicado, o que é bem mais leve para o After.
+    */
+    function prepareCurveSegment(prop, k1, k2) {
+        var dt = prop.keyTime(k2) - prop.keyTime(k1);
+        if (dt <= 0) return null;
+
+        var easeLen = prop.keyOutTemporalEase(k1).length;
+        var avg = segmentAverageSpeeds(prop, k1, k2, easeLen, dt);
+        var BEZ = KeyframeInterpolationType.BEZIER;
+
+        prop.setInterpolationTypeAtKey(k1, prop.keyInInterpolationType(k1), BEZ);
+        prop.setInterpolationTypeAtKey(k2, BEZ, prop.keyOutInterpolationType(k2));
+
+        try { prop.setTemporalContinuousAtKey(k1, false); } catch (e1) {}
+        try { prop.setTemporalAutoBezierAtKey(k1, false); } catch (e2) {}
+        try { prop.setTemporalContinuousAtKey(k2, false); } catch (e3) {}
+        try { prop.setTemporalAutoBezierAtKey(k2, false); } catch (e4) {}
+
+        return {prop: prop, k1: k1, k2: k2, easeLen: easeLen, avg: avg};
+    }
+
+    /*
         Conversão (mesma ideia do Flow):
         saída da 1ª key:   influence = x1 * 100,       speed = (y1 / x1) * velocidadeMédia
         entrada da 2ª key: influence = (1 - x2) * 100, speed = ((1 - y2) / (1 - x2)) * velocidadeMédia
         mode: "both" | "out" | "in"
     */
-    function applyCurveToSegment(prop, k1, k2, c, mode) {
-        var dt = prop.keyTime(k2) - prop.keyTime(k1);
-        if (dt <= 0) return false;
-
-        var easeLen = prop.keyOutTemporalEase(k1).length;
-        var deltas = keyDeltas(prop, k1, k2, easeLen);
-        if (!deltas) throw new Error("tipo de propriedade não suportado.");
-
+    function applyPreparedCurve(seg, c, mode) {
         var x1 = Math.max(0.001, Math.min(1, c.x1));
         var x2 = Math.max(0, Math.min(0.999, c.x2));
         var outInf = Math.max(0.1, Math.min(100, x1 * 100));
@@ -4054,29 +4101,27 @@
         var outEase = [];
         var inEase = [];
 
-        for (var d = 0; d < easeLen; d++) {
-            var avg = deltas[d] / dt;
-            outEase.push(new KeyframeEase((c.y1 / x1) * avg, outInf));
-            inEase.push(new KeyframeEase(((1 - c.y2) / (1 - x2)) * avg, inInf));
+        for (var d = 0; d < seg.easeLen; d++) {
+            outEase.push(new KeyframeEase((c.y1 / x1) * seg.avg[d], outInf));
+            inEase.push(new KeyframeEase(((1 - c.y2) / (1 - x2)) * seg.avg[d], inInf));
         }
 
-        var BEZ = KeyframeInterpolationType.BEZIER;
-
+        // o outro lado de cada key é lido na hora: trechos encadeados
+        // (k1-k2, k2-k3) não sobrescrevem um ao outro
         if (mode !== "in") {
-            prop.setInterpolationTypeAtKey(k1, prop.keyInInterpolationType(k1), BEZ);
-            try { prop.setTemporalContinuousAtKey(k1, false); } catch (e1) {}
-            try { prop.setTemporalAutoBezierAtKey(k1, false); } catch (e2) {}
-            prop.setTemporalEaseAtKey(k1, prop.keyInTemporalEase(k1), outEase);
+            seg.prop.setTemporalEaseAtKey(seg.k1, seg.prop.keyInTemporalEase(seg.k1), outEase);
         }
-
         if (mode !== "out") {
-            prop.setInterpolationTypeAtKey(k2, BEZ, prop.keyOutInterpolationType(k2));
-            try { prop.setTemporalContinuousAtKey(k2, false); } catch (e3) {}
-            try { prop.setTemporalAutoBezierAtKey(k2, false); } catch (e4) {}
-            prop.setTemporalEaseAtKey(k2, inEase, prop.keyOutTemporalEase(k2));
+            seg.prop.setTemporalEaseAtKey(seg.k2, inEase, seg.prop.keyOutTemporalEase(seg.k2));
         }
 
         return true;
+    }
+
+    function applyCurveToSegment(prop, k1, k2, c, mode) {
+        var seg = prepareCurveSegment(prop, k1, k2);
+        if (!seg) return false;
+        return applyPreparedCurve(seg, c, mode);
     }
 
     // Segmentos [prop, k1, k2] a partir das keyframes selecionadas na comp ativa.
@@ -4150,7 +4195,7 @@
 
         var ED_RANGE = [-0.6, 1.6];
         var ED_PAD = 12;
-        var LIVE_INTERVAL = 60; // ms entre aplicações durante o arraste
+        var LIVE_INTERVAL = 100; // ms entre aplicações durante o arraste
 
         var curves = readCurveFile(getCurveStoreFile());
         if (!curves) {
@@ -4436,14 +4481,31 @@
             return collectCurveSegments(comp);
         }
 
-        // Aplica a curva do editor nos trechos. Sem alertas: resultado vai no status.
-        function applyToSegments(segments) {
-            var ok = 0;
+        // Prepara os trechos (uma vez). Os que falharem são contados.
+        function prepareSegments(raw) {
+            var out = [];
             var failed = 0;
 
-            for (var i = 0; i < segments.length; i++) {
+            for (var i = 0; i < raw.length; i++) {
                 try {
-                    if (applyCurveToSegment(segments[i][0], segments[i][1], segments[i][2], lib.edit, "both")) ok++;
+                    var seg = prepareCurveSegment(raw[i][0], raw[i][1], raw[i][2]);
+                    if (seg) out.push(seg);
+                } catch (e) {
+                    failed++;
+                }
+            }
+
+            return {segments: out, failed: failed};
+        }
+
+        // Aplica a curva do editor nos trechos já preparados.
+        function applyToSegments(prepared, failedBefore) {
+            var ok = 0;
+            var failed = failedBefore || 0;
+
+            for (var i = 0; i < prepared.length; i++) {
+                try {
+                    if (applyPreparedCurve(prepared[i], lib.edit, "both")) ok++;
                 } catch (e) {
                     failed++;
                 }
@@ -4481,7 +4543,8 @@
             var r;
             app.beginUndoGroup(undoName);
             try {
-                r = applyToSegments(found.segments);
+                var prep = prepareSegments(found.segments);
+                r = applyToSegments(prep.segments, prep.failed);
             } finally {
                 app.endUndoGroup();
             }
@@ -4492,10 +4555,15 @@
         // Cada atualização fecha o próprio Undo: nada fica aberto se o mouse
         // for solto fora do painel.
         function applyLive() {
+            // nada mudou desde a última vez: não incomoda o After
+            var sig = curveValuesText(lib.edit);
+            if (sig === live.lastSig) return;
+            live.lastSig = sig;
+
             var r;
             app.beginUndoGroup("Mesmo Tools - Curva (arrastar)");
             try {
-                r = applyToSegments(live.segments);
+                r = applyToSegments(live.segments, live.failed);
             } finally {
                 app.endUndoGroup();
             }
@@ -4521,8 +4589,17 @@
             if (cbLive.value) {
                 var found = findSegments();
                 if (found.segments.length) {
-                    live.segments = found.segments;
+                    // prepara uma vez (interpolação, velocidade média)
+                    app.beginUndoGroup("Mesmo Tools - Curva (arrastar)");
+                    try {
+                        var prep = prepareSegments(found.segments);
+                        live.segments = prep.segments;
+                        live.failed = prep.failed;
+                    } finally {
+                        app.endUndoGroup();
+                    }
                     live.skipped = found.skipped;
+                    live.lastSig = "";
                 }
             }
 
