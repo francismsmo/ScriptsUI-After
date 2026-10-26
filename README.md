@@ -48,6 +48,11 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 - **Alças:** arraste para ajustar ao vivo; Shift arredonda os valores. Se o mouse sair do editor, a alça é solta ali.
 - **Gráfico Valor / Velocidade:** *Valor* mostra a curva bezier; *Velocidade* mostra o speed graph, como no Graph Editor do After. Nele, cada alça é a influência (para os lados) e a velocidade da keyframe (para cima e para baixo). A linha tracejada é a velocidade média do trecho (1×).
 - **Salvar / ★ / Excluir:** guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown) ou apaga.
+- **Clássico:** o easy ease do After com a influência ajustável, keyframe por keyframe (velocidade 0, como o F9).
+  - **<** Entrada: influência do lado que chega em cada keyframe.
+  - **>** Saída: influência do lado que sai.
+  - **×** Ambos: mesma influência nos dois lados (ajusta os outros dois sliders junto).
+  - O slider aplica ao vivo enquanto você arrasta; o campo aceita de 0,1 a 100; o botão da direita de cada linha reaplica nas keys selecionadas.
 - **Aplicar ao vivo:** desmarque se quiser só desenhar a curva sem mexer nas keys.
 - Cada atualização entra no Undo; enquanto você arrasta, o After registra alguns passos por segundo.
 

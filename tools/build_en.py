@@ -270,6 +270,25 @@ TR = {
     "Excluir a curva \\\"": "Delete the curve \\\"",
     "Curva excluída: ": "Curve deleted: ",
 
+    # ---- curvas: clássico
+    "Clássico": "Classic",
+    "Entrada: influência do lado que chega em cada keyframe": "In: influence on the incoming side of each keyframe",
+    "Saída: influência do lado que sai de cada keyframe": "Out: influence on the outgoing side of each keyframe",
+    "Ambos: entrada e saída com a mesma influência": "Both: same influence on in and out",
+    "Abra uma comp e selecione keyframes.": "Open a comp and select keyframes.",
+    "Selecione keyframes para aplicar o ease clássico.": "Select keyframes to apply the classic ease.",
+    "Mesmo Tools - Ease clássico": "Mesmo Tools - Classic ease",
+    "Mesmo Tools - Ease clássico (arrastar)": "Mesmo Tools - Classic ease (drag)",
+    "Entrada e saída ": "In and out ",
+    "Clássico: ": "Classic: ",
+    " keyframe(s).": " keyframe(s).",
+    " (0,1 a 100)": " (0.1 to 100)",
+    "Aplicar ": "Apply ",
+    "na entrada": "to the in side",
+    "na saída": "to the out side",
+    "nos dois lados": "to both sides",
+    " das keyframes selecionadas": " of the selected keyframes",
+
     # ---- camadas
     "Mesmo Tools - Criar camada": "Mesmo Tools - Create layer",
     "Texto": "Text",

@@ -4075,6 +4075,93 @@
         return applyPreparedCurve(seg, c, mode);
     }
 
+    // Keyframes selecionadas: [{prop, keys:[...]}] nas propriedades que aceitam ease.
+    function collectSelectedKeyframes(comp) {
+        var props = [];
+        var out = [];
+        var i;
+
+        function addProp(p) {
+            if (!p) return;
+            for (var k = 0; k < props.length; k++) if (props[k] === p) return;
+            props.push(p);
+        }
+
+        try {
+            var cp = comp.selectedProperties;
+            for (i = 0; i < cp.length; i++) addProp(cp[i]);
+        } catch (e1) {}
+
+        try {
+            var layers = comp.selectedLayers;
+            for (i = 0; i < layers.length; i++) {
+                var lp = layers[i].selectedProperties;
+                for (var j = 0; j < lp.length; j++) addProp(lp[j]);
+            }
+        } catch (e2) {}
+
+        for (i = 0; i < props.length; i++) {
+            try {
+                if (props[i].propertyType !== PropertyType.PROPERTY) continue;
+                var keys = props[i].selectedKeys;
+                if (!keys || keys.length === 0) continue;
+                if (!isCurveCompatibleProperty(props[i])) continue;
+                out.push({prop: props[i], keys: keys});
+            } catch (e3) {}
+        }
+
+        return out;
+    }
+
+    /*
+        Easy ease clássico, por keyframe (como o F9 / Keyframe Velocity):
+        velocidade 0 e só a influência muda.
+        side: "in" (lado que chega), "out" (lado que sai) ou "both".
+    */
+    function applyClassicEase(entries, side, inInf, outInf) {
+        var BEZ = KeyframeInterpolationType.BEZIER;
+        var count = 0;
+
+        inInf = Math.max(0.1, Math.min(100, inInf));
+        outInf = Math.max(0.1, Math.min(100, outInf));
+
+        for (var i = 0; i < entries.length; i++) {
+            var p = entries[i].prop;
+            var keys = entries[i].keys;
+
+            for (var j = 0; j < keys.length; j++) {
+                var k = keys[j];
+                var curIn = p.keyInTemporalEase(k);
+                var curOut = p.keyOutTemporalEase(k);
+                var newIn = curIn;
+                var newOut = curOut;
+                var d;
+
+                if (side !== "out") {
+                    newIn = [];
+                    for (d = 0; d < curIn.length; d++) newIn.push(new KeyframeEase(0, inInf));
+                }
+                if (side !== "in") {
+                    newOut = [];
+                    for (d = 0; d < curOut.length; d++) newOut.push(new KeyframeEase(0, outInf));
+                }
+
+                p.setInterpolationTypeAtKey(
+                    k,
+                    side !== "out" ? BEZ : p.keyInInterpolationType(k),
+                    side !== "in" ? BEZ : p.keyOutInterpolationType(k)
+                );
+                try { p.setTemporalContinuousAtKey(k, false); } catch (e1) {}
+                try { p.setTemporalAutoBezierAtKey(k, false); } catch (e2) {}
+
+                p.setTemporalEaseAtKey(k, newIn, newOut);
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     // Segmentos [prop, k1, k2] a partir das keyframes selecionadas na comp ativa.
     function collectCurveSegments(comp) {
         var props = [];
@@ -4227,6 +4314,180 @@
 
         var btnSave = uiButton(manageRow, "Save", {tip: "Saves to the library (updates if the name exists)"});
         var btnDelete = uiButton(manageRow, "Delete");
+
+        // ----- Clássico (easy ease com influência ajustável) -----
+        var classicSec = uiSection(tab, "Classic");
+        var classic = {
+            "in": parseFloat(loadSetting("classicIn", "33.33")),
+            "out": parseFloat(loadSetting("classicOut", "33.33")),
+            "both": parseFloat(loadSetting("classicBoth", "33.33")),
+            last: 0
+        };
+        var CLASSIC_ROWS = [
+            {side: "in", glyph: "<", tip: "In: influence on the incoming side of each keyframe"},
+            {side: "out", glyph: ">", tip: "Out: influence on the outgoing side of each keyframe"},
+            {side: "both", glyph: "×", tip: "Both: same influence on in and out"}
+        ];
+        var classicCtl = {};
+
+        function fmtInf(v) {
+            v = Math.max(0.1, Math.min(100, v));
+            return v < 10 ? String(Math.round(v * 10) / 10) : String(Math.round(v));
+        }
+
+        // Ícone do botão de aplicar: quadrado, meio-diamante e círculo, como na referência.
+        function drawClassicIcon(state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var c = state.leftButtonPressed ? THEME.accentDown : (state.mouseOver ? THEME.accentHover : THEME.accent);
+            var cx = w / 2;
+            var cy = h / 2;
+            var r = 6;
+
+            if (state.mouseOver) {
+                uiRoundRect(g, 0, 0, w, h, 4);
+                g.fillPath(uiBrush(g, THEME.surface));
+            }
+
+            g.newPath();
+            if (this.mesmoSide === "in") {
+                uiRoundRect(g, cx - r, cy - r, r * 2, r * 2, 2);
+            } else if (this.mesmoSide === "out") {
+                g.moveTo(cx, cy - r - 1);
+                g.lineTo(cx + r + 1, cy);
+                g.lineTo(cx, cy + r + 1);
+                g.lineTo(cx - r - 1, cy);
+                g.closePath();
+                g.fillPath(uiBrush(g, c));
+                // metade "vazada": ease só de um lado
+                g.newPath();
+                g.moveTo(cx, cy - r + 3);
+                g.lineTo(cx - r + 2, cy);
+                g.lineTo(cx, cy + r - 3);
+                g.closePath();
+                g.fillPath(uiBrush(g, THEME.well));
+                return;
+            } else {
+                g.ellipsePath(cx - r, cy - r, r * 2, r * 2);
+            }
+            g.fillPath(uiBrush(g, c));
+        }
+
+        function drawGlyph() {
+            var g = this.graphics;
+            var font = uiFont("BOLD", 13);
+            uiText(g, this.mesmoGlyph, font, THEME.textDim, 0, 0, this.size[0], this.size[1]);
+        }
+
+        function classicApply(side, undoName) {
+            var comp = app.project ? app.project.activeItem : null;
+            if (!isComp(comp)) {
+                status.text = "Open a comp and select keyframes.";
+                return;
+            }
+
+            var entries = collectSelectedKeyframes(comp);
+            if (entries.length === 0) {
+                status.text = "Select keyframes to apply the classic ease.";
+                return;
+            }
+
+            var inInf = side === "both" ? classic.both : classic["in"];
+            var outInf = side === "both" ? classic.both : classic.out;
+            var n = 0;
+
+            app.beginUndoGroup(undoName || "Mesmo Tools - Classic ease");
+            try {
+                n = applyClassicEase(entries, side, inInf, outInf);
+            } finally {
+                app.endUndoGroup();
+            }
+
+            var label = side === "in" ? "In " + fmtInf(inInf) + "%"
+                : side === "out" ? "Out " + fmtInf(outInf) + "%"
+                : "In and out " + fmtInf(inInf) + "%";
+            status.text = "Classic: " + label + " in " + n + " keyframe(s).";
+        }
+
+        function setClassicValue(side, v, fromSlider) {
+            v = Math.max(0.1, Math.min(100, v));
+            classic[side] = v;
+            saveSetting(side === "in" ? "classicIn" : side === "out" ? "classicOut" : "classicBoth", v);
+
+            var ctl = classicCtl[side];
+            ctl.field.text = fmtInf(v);
+            if (!fromSlider) ctl.slider.value = v;
+
+            // "Ambos" acompanha: mexer nele ajusta também os outros dois
+            if (side === "both") {
+                classic["in"] = v;
+                classic.out = v;
+                classicCtl["in"].slider.value = v;
+                classicCtl["in"].field.text = fmtInf(v);
+                classicCtl.out.slider.value = v;
+                classicCtl.out.field.text = fmtInf(v);
+            }
+        }
+
+        for (var cr = 0; cr < CLASSIC_ROWS.length; cr++) {
+            var def = CLASSIC_ROWS[cr];
+            var rowC = classicSec.add("group");
+            rowC.orientation = "row";
+            rowC.alignChildren = ["fill", "center"];
+            rowC.spacing = 6;
+
+            var glyph = rowC.add("group");
+            glyph.preferredSize = [14, 22];
+            glyph.mesmoGlyph = def.glyph;
+            glyph.onDraw = drawGlyph;
+            glyph.helpTip = def.tip;
+
+            var sl = rowC.add("slider", undefined, classic[def.side], 0.1, 100);
+            sl.alignment = ["fill", "center"];
+            sl.preferredSize.width = 60;
+            sl.helpTip = def.tip;
+
+            var fld = rowC.add("edittext", undefined, fmtInf(classic[def.side]));
+            fld.characters = 4;
+            fld.helpTip = def.tip + " (0.1 to 100)";
+
+            var ico = rowC.add("button", undefined, "");
+            ico.preferredSize = [24, 24];
+            ico.mesmoSide = def.side;
+            ico.onDraw = drawClassicIcon;
+            ico.helpTip = "Apply " + (def.side === "in" ? "to the in side" : def.side === "out" ? "to the out side" : "to both sides") + " of the selected keyframes";
+
+            classicCtl[def.side] = {slider: sl, field: fld};
+
+            (function (side, slider, field, icon) {
+                // arrastando: aplica ao vivo, no máximo a cada 100 ms
+                slider.onChanging = function () {
+                    setClassicValue(side, slider.value, true);
+                    if (cbLive.value && new Date().getTime() - classic.last >= 100) {
+                        classic.last = new Date().getTime();
+                        classicApply(side, "Mesmo Tools - Classic ease (drag)");
+                    }
+                };
+                // soltou: valor final exato
+                slider.onChange = function () {
+                    setClassicValue(side, slider.value, true);
+                    if (cbLive.value) classicApply(side);
+                };
+                field.onChange = function () {
+                    var v = parseFloat(String(field.text).replace(",", "."));
+                    if (isNaN(v)) {
+                        field.text = fmtInf(classic[side]);
+                        return;
+                    }
+                    setClassicValue(side, v, false);
+                    if (cbLive.value) classicApply(side);
+                };
+                icon.onClick = function () {
+                    classicApply(side);
+                };
+            })(def.side, sl, fld, ico);
+        }
 
         var cbLive = uiFlex(tab.add("checkbox", undefined, "Live on selected keyframes"));
         cbLive.value = loadSetting("curvesLive", "1") === "1";
