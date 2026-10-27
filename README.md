@@ -2,6 +2,8 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
+**Versão atual: v2.13** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
+
 > **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface (and the expression tutorials) in English. Install it the same way. See [English version](#english-version) below.
 
 O painel tem 4 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:

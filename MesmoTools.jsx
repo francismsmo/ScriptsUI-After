@@ -12,46 +12,31 @@
     - speed_curves.txt          (curvas)
     - expression_favorites.txt  (expressões)
 
-    v2.0
-    - Tudo num arquivo só: MesmoTools.jsx (antigo CompManager_Mesmo.jsx).
-    - Visual novo: cabeçalho, navegação e botões desenhados, seções no
-      lugar das caixas, aba aberta por último é lembrada.
-    - Nova aba Curvas: 22 curvas prontas num dropdown (favoritas no topo,
-      separadas por categoria) e editor ao vivo: escolher uma curva,
-      arrastar as alças ou digitar os valores já muda as keyframes
-      selecionadas na timeline.
-    - Explode: recusa texto vertical/justificado (como o avulso fazia) e
-      expõe explodeMesmo(options) para outros scripts.
-    - Visual: destaque lilás; 3 abas principais (Animação, Comps,
-      Expressões) que mostram todas as ferramentas ao mesmo tempo:
-      lado a lado no painel largo, empilhadas no estreito (botão ⇆ força
-      um modo); cada ferramenta recolhe/expande pelo cabeçalho;
-      editor de curva quadrado e compacto.
-    - Novo painel Camadas: criar Texto/Adjustment/Null/Sólido/Shape/
-      Câmera/Luz; Null no atributo (null no ponto exato, linkado, nome
-      "Camada-position-null"); grade 3x3 de Anchor Point; Extract de
-      grupos de shape; marcadores nas batidas do áudio.
-    - Curvas: modo Velocidade (speed graph) no editor; arrastar para fora
-      do editor solta a alça; campos acompanham a largura do painel.
-    - Desempenho: recolher/expandir e trocar de aba recalculam só a aba
-      ativa; medidas de texto em cache; resize mais leve.
-    - Curvas: arrastar mais leve (cada trecho é preparado uma vez no
-      clique; no arraste só o ease é reaplicado, e só quando muda);
-      agora funciona em paths de máscara/shape e outros parâmetros que
-      aceitam ease (velocidade média lida do próprio After).
-    - Curvas > Clássico: sliders de influência de Entrada (<), Saída (>)
-      e Ambos (×), com campo numérico e botão de aplicar; easy ease por
-      keyframe (velocidade 0), ao vivo enquanto arrasta.
-    - Barra de rolagem: o painel pode ficar pequeno e o conteúdo rola
-      (cabeçalho e abas fixos); cada aba rola só o próprio conteúdo.
-    - 3D/Blur: liga/desliga Motion Blur em todas as camadas possíveis
-      (e a chave da comp); usa a comp aberta se nada estiver selecionado.
-    - Expressões: 18 atalhos do repositório After-effects-Expressions,
-      com descrição, "Aplicar em" e tutorial em comentário; filtro por
-      categoria; cria o Slider Control quando a expressão precisa.
-    - Duplicar: pasta da cópia com a comp principal + subpasta
-      PRECOMPS_<sufixo> com as precomps; nome da pasta sai do sufixo
-      quando vazio; prévia do resultado; lembra as opções.
+    Versão atual: v2.13 (mude SCRIPT_VERSION a cada alteração: 2.14, 2.15...)
+    Histórico completo em CHANGELOG.md.
+
+    v2.13 - Curvas > Clássico: Entrada (<), Saída (>) e Ambos (×) com
+            slider, campo e botão; easy ease por keyframe, ao vivo.
+    v2.12 - Curvas: arraste mais leve; paths de máscara/shape e outros
+            parâmetros com ease passam a funcionar.
+    v2.11 - Criar Texto não vira mais "Texto 2"; erros dos botões
+            aparecem com mensagem e linha.
+    v2.10 - Versão em inglês (MesmoTools_EN.jsx); Null na Position com
+            seleção só da camada e um único null para várias camadas.
+    v2.09 - Novo painel Camadas: Criar, Null no atributo, Anchor Point
+            3x3, Extract e Batidas.
+    v2.08 - Curvas: modo Velocidade (speed graph); alça solta ao sair do
+            editor; campos responsivos; desempenho.
+    v2.07 - Barra de rolagem.
+    v2.06 - Curvas: biblioteca em dropdown e editor ao vivo.
+    v2.05 - Ferramentas de cada aba na mesma tela (lado a lado/empilhado,
+            recolher/expandir).
+    v2.04 - Visual lilás, abas agrupadas, miniaturas de curva quadradas.
+    v2.03 - 3D/Blur: liga/desliga Motion Blur.
+    v2.02 - Corrige erro ao abrir ("short" reservado); 18 atalhos de
+            expressões com tutorial.
+    v2.01 - Duplicar organiza em pasta + subpasta PRECOMPS_<sufixo>.
+    v2.0  - Tudo num arquivo só, visual novo, aba Curvas.
 
     v1.1
     - Comps: timecode em 23,976 / 29,97 / 59,94 não perde mais frames
@@ -68,7 +53,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.0";
+    var SCRIPT_VERSION = "2.13";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 

@@ -28,6 +28,8 @@ HEADER_EN = '''/*
 
     GENERATED FILE: edit MesmoTools.jsx (Portuguese) and run
     tools/build_en.py to rebuild this file.
+    Same version number as the Portuguese file (see SCRIPT_VERSION and
+    CHANGELOG.md).
 
     Tabs:
     - Animation = Curves + Explode (on the same screen)

@@ -4,6 +4,8 @@
 
     GENERATED FILE: edit MesmoTools.jsx (Portuguese) and run
     tools/build_en.py to rebuild this file.
+    Same version number as the Portuguese file (see SCRIPT_VERSION and
+    CHANGELOG.md).
 
     Tabs:
     - Animation = Curves + Explode (on the same screen)
@@ -20,7 +22,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.0";
+    var SCRIPT_VERSION = "2.13";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
