@@ -47,6 +47,11 @@ textarea.su-edit { font-family: "JetBrains Mono", ui-monospace, monospace; font-
 .su-dd { background: #2e2e2e; color: var(--ctl-fg); border: 1px solid var(--ctl-line); border-radius: 3px; font: inherit; font-size: 12px; padding: 0 4px; outline: none; }
 .su-dd:focus { border-color: var(--accent); }
 .su-slider { margin: 0; accent-color: var(--accent); }
+.su-list { background: var(--ctl); border: 1px solid var(--ctl-line); border-radius: 2px; overflow-y: auto; outline: none; padding: 2px 0; }
+.su-list:focus { border-color: var(--accent); }
+.su-row { padding: 0 6px; line-height: 19px; white-space: pre; overflow: hidden; text-overflow: ellipsis; cursor: default; font-size: 12px; }
+.su-row.hdr { color: #8f8f8f; font-size: 11px; letter-spacing: .04em; }
+.su-row.on { background: #3d5a99; color: #fff; }
 .su-scroll { background: #1b1b1b; border-radius: 6px; }
 .su-scroll .su-thumb { position: absolute; left: 2px; right: 2px; background: #555; border-radius: 5px; cursor: grab; }
 .su-scroll.dis .su-thumb { opacity: .25; }
@@ -62,6 +67,12 @@ textarea.su-edit { font-family: "JetBrains Mono", ui-monospace, monospace; font-
 #log .l.alert { border-color: var(--warn); color: var(--warn); }
 #log .l.undo { border-color: var(--accent); color: var(--fg); }
 #log .l.error { border-color: #ff7a7a; color: #ff9a9a; }
+#log .l.expr { border-color: var(--ok); color: var(--fg); }
+#log .l.add { color: var(--muted); }
+.layers { display: grid; gap: 4px; margin: 0 0 10px; }
+.layers label { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.layers input { accent-color: var(--accent); }
+.layers .k { color: var(--muted); font-size: 12px; }
 #log .empty { color: var(--muted); font-family: inherit; }
 .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
 .card ul b { color: var(--fg); font-weight: 600; }
@@ -98,11 +109,11 @@ textarea.su-edit { font-family: "JetBrains Mono", ui-monospace, monospace; font-
         <div id="log"><span class="empty">Clique nos botões do painel: as ações e avisos aparecem aqui.</span></div>
       </div>
       <div class="card">
-        <h2>Projeto simulado</h2>
+        <h2>Camadas selecionadas na comp simulada</h2>
+        <div class="layers" id="layers"></div>
         <ul>
-          <li>Comp aberta <b>Storyboard_v3</b>, 1920×1080, 30 fps</li>
-          <li>Camadas: <b>Titulo</b> (texto), <b>Logo</b> (selecionada, Position com 2 keys selecionadas), <b>Icones</b> (shape), <b>Musica</b> (áudio)</li>
-          <li>Avisos e confirmações do After viram linhas no log; confirmações respondem "Sim"</li>
+          <li>Comp aberta <b>Storyboard_v3</b>, 1920×1080, 30 fps. A Position do Logo tem 2 keys selecionadas, para testar as curvas.</li>
+          <li>Avisos do After viram linhas no log; confirmações respondem "Sim".</li>
         </ul>
       </div>
     </div>
@@ -143,11 +154,27 @@ textarea.su-edit { font-family: "JetBrains Mono", ui-monospace, monospace; font-
     const m = src.match(/SCRIPT_VERSION\s*=\s*"([^"]+)"/) || src.match(/v(\d+\.\d+)/);
     document.getElementById("ver").textContent = m ? (m[1][0] === "v" ? m[1] : "v" + m[1]) : "";
     document.getElementById("tabname").textContent = lang === "en" ? "MesmoTools_EN.jsx" : "MesmoTools.jsx";
-    try { ScriptUIEmu.mount(host, src, log); }
+    try { const ae = ScriptUIEmu.mount(host, src, log); drawLayers(ae); }
     catch (e) { console.error(e); log("Erro ao abrir o painel: " + e.message, "error"); }
     document.querySelectorAll("[data-lang]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
   }
 
+  const KIND = { TextLayer: "texto", ShapeLayer: "shape", AVLayer: "sólido / áudio" };
+  function drawLayers(ae) {
+    const box = document.getElementById("layers"); box.innerHTML = "";
+    const kindOf = (l) => l.hasAudio ? "áudio" : l.nullLayer ? "null" : (KIND[Object.getPrototypeOf(l).constructor.name] || "camada");
+    ae.comp._layers.forEach((l) => {
+      const lab = document.createElement("label");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!l.selected;
+      cb.addEventListener("change", () => { l.selected = cb.checked; });
+      const n = document.createElement("span"); n.textContent = l.name;
+      const k = document.createElement("span"); k.className = "k"; k.textContent = kindOf(l);
+      lab.append(cb, n, k); box.appendChild(lab);
+    });
+    clearInterval(drawLayers.t);
+    let sig = "";
+    drawLayers.t = setInterval(() => { const s2 = ae.comp._layers.map((l) => l.name + l.selected).join("|"); if (s2 !== sig) { if (sig) drawLayers(ae); sig = s2; } }, 500);
+  }
   document.querySelectorAll("[data-lang]").forEach((b) => b.addEventListener("click", () => {
     lang = b.dataset.lang; try { localStorage.setItem("mt-lang", lang); } catch (e) {}
     boot();

@@ -1,7 +1,18 @@
 # Mesmo Tools — histórico de versões
 
-A versão aparece no canto do cabeçalho do painel (ex.: `v2.15`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
+A versão aparece no canto do cabeçalho do painel (ex.: `v2.16`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
 A versão em inglês (`MesmoTools_EN.jsx`) tem sempre o mesmo número da portuguesa.
+
+## v2.16 — 28/10/2026
+- **Expressões em lista:** todos os atalhos numa lista só, separados por categoria. Escolha um, selecione as camadas e clique em **APLICAR** (ou dê dois cliques na lista).
+- Não precisa abrir a propriedade: o painel acha onde cada expressão vai (Position, Rotation, Scale, Source Text, Anchor Point, Start do texto, Size do retângulo) e prepara o que faltar:
+  - cria os Slider Control que a expressão usa;
+  - nos textos, cria o animator de Opacity 0 com o Range Selector;
+  - na shape, cria um retângulo se não tiver; os sliders de Largura/Altura já nascem com o tamanho atual;
+  - liga o 3D quando a expressão precisa.
+- Expressões que citavam camadas por nome agora usam as camadas selecionadas: **Caixa reativa** (selecione o texto e a shape) e **Encadear texto** (selecione 2 ou mais textos, na ordem em que devem animar).
+- O tutorial não vai mais para a propriedade; só o código. Saíram o campo de código e os botões de nova/capturar/salvar/excluir. Expressões que você já tinha salvo continuam na lista (★ Minhas) e vão nas propriedades selecionadas.
+- Pequena dica de uma linha embaixo da lista dizendo onde a expressão vai.
 
 ## v2.15 — 28/10/2026
 - **Volta a aba Expressões**, em versão compacta:

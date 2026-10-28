@@ -369,7 +369,7 @@
             ].join("\n")
         },
         {
-            name: "Chain APOIO text after PRINCIPAL",
+            name: "Chain texts in sequence",
             cat: "Text",
             target: "Range Selector > Start (APOIO layer)",
             desc: "Makes the APOIO layer's animation start on its own as soon as the PRINCIPAL layer finishes animating (Start reaches 100).",

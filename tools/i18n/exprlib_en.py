@@ -294,7 +294,7 @@ var finalTime = framesToTime(numChars); // 1 frame per letter
 linear(time, 0, finalTime, 0, 100);
 """)
 
-add("Chain APOIO text after PRINCIPAL", "Text", "Range Selector > Start (APOIO layer)",
+add("Chain texts in sequence", "Text", "Range Selector > Start (APOIO layer)",
     "Makes the APOIO layer's animation start on its own as soon as the PRINCIPAL layer finishes animating (Start reaches 100).",
     """/* ============================================================
    CHAINED TEXT: APOIO STARTS WHEN PRINCIPAL FINISHES

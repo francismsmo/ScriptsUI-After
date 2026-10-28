@@ -2,7 +2,7 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-**Versão atual: v2.15** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
+**Versão atual: v2.16** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
 
 > **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface in English. Install it the same way. See [English version](#english-version) below.
 
@@ -11,7 +11,7 @@ O painel tem 4 abas principais, e cada uma mostra **todas as suas ferramentas ao
 - **Animação** = Curvas + Explode
 - **Camadas** = Criar + Anchor Point · Extract + Batidas
 - **Comps** = Ajustes + Duplicar + 3D / Blur
-- **Expressões** (compacta)
+- **Expressões** (lista: escolha, selecione as camadas e aplique)
 
 Com o painel largo, as ferramentas ficam lado a lado em colunas; estreito, ficam empilhadas. O botão **⇆** ao lado das abas troca entre *Auto*, *Lado a lado* e *Empilhado*. Clicar no cabeçalho de uma ferramenta recolhe ou expande ela, e o painel lembra o que ficou recolhido.
 
@@ -29,7 +29,7 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
-| **Expressões** | 18 atalhos prontos (delay, wiggle, texto, contadores, caixa reativa, 3D…) e as suas favoritas (★ Minhas), num dropdown por categoria. Cada atalho traz o tutorial em comentário no topo do código; "Aplicar em" e "Precisa de" aparecem logo abaixo do dropdown. Ícones para nova, capturar, salvar e excluir; cria o Slider Control quando a expressão precisa. |
+| **Expressões** | Lista com 18 atalhos (delay, wiggle, texto, contadores, caixa reativa, 3D…). Escolha um, selecione as camadas e clique em **APLICAR**: o painel acha a propriedade certa e cria o que faltar (Slider Control, animator de texto, retângulo, 3D). Caixa reativa: selecione o texto e a shape. Encadear texto: selecione os textos na ordem. |
 | **3D / Blur** | Botões de ícone Ligar/Desligar para o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
 
 ## Instalação

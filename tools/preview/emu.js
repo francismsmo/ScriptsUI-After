@@ -373,6 +373,21 @@
         el._sel = el.items[Number(node.value)] || null;
         el.onChange && dispatch(() => el.onChange.call(el));
       });
+    } else if (t === "listbox") {
+      node = document.createElement("div"); node.className = "su-list"; node.tabIndex = 0;
+      const pick = (ev) => {
+        const row = ev.target.closest("[data-i]"); if (!row) return null;
+        el._sel = el.items[Number(row.dataset.i)] || null; return row;
+      };
+      node.addEventListener("click", (ev) => { if (pick(ev)) el.onChange ? dispatch(() => el.onChange.call(el)) : queueRender(); });
+      node.addEventListener("dblclick", (ev) => { if (pick(ev) && el.onDoubleClick) dispatch(() => el.onDoubleClick.call(el)); });
+      node.addEventListener("keydown", (ev) => {
+        if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+        const i = el._sel ? el.items.indexOf(el._sel) : -1;
+        const j = Math.max(0, Math.min(el.items.length - 1, i + (ev.key === "ArrowDown" ? 1 : -1)));
+        el._sel = el.items[j]; ev.preventDefault();
+        el.onChange ? dispatch(() => el.onChange.call(el)) : queueRender();
+      });
     } else if (t === "slider") {
       node = document.createElement("input"); node.type = "range"; node.className = "su-slider"; node.step = "any";
       node.addEventListener("input", () => { el.value = Number(node.value); el.onChanging && dispatch(() => el.onChanging.call(el)); });
@@ -458,6 +473,21 @@
       }
       node.value = el._sel ? String(el.items.indexOf(el._sel)) : "";
       node.disabled = !!dis;
+    } else if (el.type === "listbox") {
+      const sig = el.items.map((i) => i.text).join("\u0001");
+      if (node._sig !== sig) {
+        node.innerHTML = "";
+        el.items.forEach((it, i) => {
+          const r = document.createElement("div"); r.className = "su-row"; r.dataset.i = String(i);
+          r.textContent = it.text; if (/^— .* —$/.test(it.text)) r.classList.add("hdr");
+          node.appendChild(r);
+        });
+        node._sig = sig;
+      }
+      const si = el._sel ? el.items.indexOf(el._sel) : -1;
+      Array.prototype.forEach.call(node.children, (r, i) => r.classList.toggle("on", i === si));
+      if (si >= 0 && node._lastSel !== si) { const r = node.children[si]; if (r && r.scrollIntoView) { const top = r.offsetTop, bot = top + r.offsetHeight; if (top < node.scrollTop || bot > node.scrollTop + node.clientHeight) node.scrollTop = top - 20; } }
+      node._lastSel = si;
     } else if (el.type === "slider") {
       node.min = String(el.minvalue); node.max = String(el.maxvalue);
       if (document.activeElement !== node) node.value = String(el.value);
@@ -500,10 +530,15 @@
     const PT = { PROPERTY: 1, INDEXED_GROUP: 2, NAMED_GROUP: 3 };
     function KeyframeEase(s, i) { this.speed = s; this.influence = i; }
     function MarkerValue(c) { this.comment = c; }
+    const idxOf = (o) => { const P = o.parentProperty; const arr = P && (P.props || P.groups); return arr ? arr.indexOf(o) + 1 : 1; };
+    const ownerOf = (o) => { let x = o; while (x.parentProperty) x = x.parentProperty; return x; };
     function prop(name, mn, v, vt, parent) {
       return {
+        get propertyIndex() { return idxOf(this); }, _expr: "",
+        get expression() { return this._expr; },
+        set expression(c) { this._expr = String(c); log("ƒ " + ownerOf(this).name + " › " + this.name + "\n" + String(c).split("\n").filter((l) => l.trim()).slice(0, 4).join("\n") + (String(c).split("\n").length > 4 ? "\n…" : ""), "expr"); },
         name, matchName: mn, propertyType: PT.PROPERTY, propertyValueType: vt, parentProperty: parent, v, keys: [],
-        expression: "", expressionError: "", canSetExpression: true, canVaryOverTime: true, dimensionsSeparated: false, propertyIndex: 1,
+        expressionError: "", canSetExpression: true, canVaryOverTime: true, dimensionsSeparated: false,
         get value() { return this.v; }, get numKeys() { return this.keys.length; },
         get selectedKeys() { const o = []; this.keys.forEach((k, i) => { if (k.sel) o.push(i + 1); }); return o; },
         valueAtTime() { return this.keys.length ? this.keys[0].v : this.v; },
@@ -522,10 +557,25 @@
     }
     function group(name, mn, parent) {
       const g = {
-        name, matchName: mn, propertyType: PT.NAMED_GROUP, parentProperty: parent, props: [], propertyIndex: 1,
+        name, matchName: mn, propertyType: PT.NAMED_GROUP, parentProperty: parent, props: [], get propertyIndex() { return idxOf(this); },
         get numProperties() { return this.props.length; },
         property(k) { return typeof k === "number" ? this.props[k - 1] || null : this.props.find((p) => p.name === k || p.matchName === k) || null; },
-        addProperty(mn2) { const n = group(mn2 === "ADBE Slider Control" ? "Slider Control" : mn2, mn2, g); if (mn2 === "ADBE Slider Control") n.props.push(prop("Slider", "ADBE Slider Control-0001", 0, PVT.OneD, n)); g.props.push(n); return n; },
+        addProperty(mn2) {
+          const count = (m) => g.props.filter((p) => p.matchName === m).length + 1;
+          const NAMES = { "ADBE Slider Control": "Slider Control", "ADBE Text Animator": "Animator " + count(mn2), "ADBE Text Selector": "Range Selector " + count(mn2), "ADBE Vector Shape - Rect": "Rectangle Path " + count(mn2), "ADBE Vector Graphic - Fill": "Fill " + count(mn2), "ADBE Text Opacity": "Opacity" };
+          let n;
+          if (mn2 === "ADBE Text Opacity") n = prop("Opacity", mn2, 100, PVT.OneD, g);
+          else {
+            n = group(NAMES[mn2] || mn2, mn2, g);
+            if (mn2 === "ADBE Slider Control") n.props.push(prop("Slider", "ADBE Slider Control-0001", 0, PVT.OneD, n));
+            if (mn2 === "ADBE Text Animator") n.props.push(group("Range Selectors", "ADBE Text Selectors", n), group("Properties", "ADBE Text Animator Properties", n));
+            if (mn2 === "ADBE Text Selector") n.props.push(prop("Start", "ADBE Text Percent Start", 0, PVT.OneD, n), prop("End", "ADBE Text Percent End", 100, PVT.OneD, n));
+            if (mn2 === "ADBE Vector Shape - Rect") n.props.push(prop("Size", "ADBE Vector Rect Size", [100, 100], PVT.TwoD, n));
+          }
+          g.props.push(n);
+          log("+ " + ownerOf(g).name + " › " + n.name, "add");
+          return n;
+        },
         remove() { parent.props.splice(parent.props.indexOf(g), 1); },
         propertyGroup(n) { let x = this; for (let i = 0; i < n; i++) x = x.parentProperty; return x; },
         get propertyDepth() { let d = 0, x = this; while (x.parentProperty) { d++; x = x.parentProperty; } return d; }
@@ -548,7 +598,7 @@
       tg.props.push(prop("Anchor Point", "ADBE Anchor Point", [0, 0, 0], PVT.ThreeD_SPATIAL, tg), prop("Position", "ADBE Position", [960, 540], PVT.ThreeD_SPATIAL, tg), prop("Scale", "ADBE Scale", [100, 100, 100], PVT.ThreeD, tg), prop("Rotation", "ADBE Rotate Z", 0, PVT.OneD, tg), prop("Opacity", "ADBE Opacity", 100, PVT.OneD, tg));
       L.groups.push(tg, group("Effects", "ADBE Effect Parade", L), prop("Marker", "ADBE Marker", null, PVT.MARKER, L));
       if (kind === "shape") { const c = group("Contents", "ADBE Root Vectors Group", L); ["Estrela", "Circulo"].forEach((n) => c.props.push(group(n, "ADBE Vector Group", c))); L.groups.push(c); }
-      if (kind === "text") { const tp = group("Text", "ADBE Text Properties", L); tp.props.push(prop("Source Text", "ADBE Text Document", { text: "Mesmo Tools", baselineLocs: [0, 0, 300, 0] }, PVT.TEXT_DOCUMENT, tp)); L.groups.push(tp); }
+      if (kind === "text") { const tp = group("Text", "ADBE Text Properties", L); tp.props.push(prop("Source Text", "ADBE Text Document", { text: "Mesmo Tools", baselineLocs: [0, 0, 300, 0] }, PVT.TEXT_DOCUMENT, tp), group("Animators", "ADBE Text Animators", tp)); L.groups.push(tp); }
       L.sourceRectAtTime = () => ({ left: 0, top: 0, width: 200, height: 100 });
       L.moveBefore = function (o) { const a = comp._layers; a.splice(a.indexOf(this), 1); a.splice(Math.max(0, a.indexOf(o)), 0, this); };
       L.duplicate = function () { const d = layer(this.name + " 2", kind); const a = comp._layers; a.splice(a.indexOf(this), 0, d); return d; };
@@ -562,7 +612,7 @@
     logo.selectedProperties = [pos];
     comp.selectedProperties = [pos];
     pos.selected = true;
-    comp._layers.push(layer("Titulo", "text"), logo, layer("Icones", "shape"), layer("Musica", "audio"));
+    comp._layers.push(layer("Titulo", "text"), layer("Subtitulo", "text"), logo, layer("Icones", "shape"), layer("Musica", "audio"));
     const add = (n, k) => { const l = layer(n, k); comp._layers.unshift(l); return l; };
     comp.layers = { addText: () => add("Texto", "text"), addSolid: (c, n) => add(n, "solid"), addNull: () => add("Null 1", "null"), addShape: () => add("Shape Layer 1", "shape"), addCamera: (n) => add(n, "camera"), addLight: (n) => add(n, "light") };
     const root = { name: "Root" };
@@ -598,6 +648,7 @@
     nodes.clear(); hover.clear();
     EMU.host = host;
     const ae = buildAE(log);
+    EMU.ae = ae;
     const panel = new El("panel", "");
     panel.margins = 0;
     Object.setPrototypeOf(panel, Object.assign(Object.create(Panel.prototype), El.prototype));

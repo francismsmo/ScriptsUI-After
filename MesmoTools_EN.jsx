@@ -22,7 +22,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.15";
+    var SCRIPT_VERSION = "2.16";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -3184,7 +3184,7 @@
             ].join("\n")
         },
         {
-            name: "Chain APOIO text after PRINCIPAL",
+            name: "Chain texts in sequence",
             cat: "Text",
             target: "Range Selector > Start (APOIO layer)",
             desc: "Makes the APOIO layer's animation start on its own as soon as the PRINCIPAL layer finishes animating (Start reaches 100).",
@@ -3599,388 +3599,496 @@
     }
 
     /*
-        Aba Expressões (versão compacta).
-        Dropdown de categoria + dropdown de expressão, uma linha com a
-        descrição, o código num campo menor e os botões em ícones.
+        Aba Expressões (lista).
+        Escolha um atalho na lista, selecione as camadas e clique em APLICAR.
+        O painel acha a propriedade certa em cada camada e cria o que faltar:
+        Slider Control, animator de texto, retângulo na shape, chave 3D.
     */
+
+    // Onde cada atalho da biblioteca vai (mesma ordem de EXPRESSION_LIBRARY).
+    var EXPRESSION_TARGETS = [
+        "position", "rotation", "scale",
+        "scale", "scale", "rotation", "any", "scale",
+        "textStart", "textChain",
+        "sourceText", "sourceText", "sourceText",
+        "anchorBox", "rectBox", "rectSliders",
+        "scale3d", "rotation"
+    ];
+
+    // Dica de uma linha mostrada embaixo da lista.
+    var EXPRESSION_HINTS = [
+        "Layers' Position: follows the parent with a delay.",
+        "Layers' Rotation: follows the parent with a delay.",
+        "Layers' Scale: follows the parent with a delay.",
+        "Scale of the selected layers.",
+        "Scale of the selected layers.",
+        "Rotation of the selected layers.",
+        "Selected property (or Position).",
+        "Scale of the selected layers.",
+        "Text layers: creates the animator and reveals letter by letter.",
+        "2+ text layers: each one animates after the previous, in selection order.",
+        "Source Text of the text layers (creates the Slider Control).",
+        "Source Text of the text layers (creates the Slider Control).",
+        "Source Text of the text layers (creates the Slider Control).",
+        "Text layers' Anchor Point (centered on the text).",
+        "Select the text and the shape: the box follows the text.",
+        "Shapes: rectangle Size from two sliders on the layer.",
+        "Layers' Scale (turns 3D on).",
+        "Rotation of the selected layers."
+    ];
+
+    var EXPRESSION_NEED_MSG = {
+        textStart: "Select one or more text layers.",
+        sourceText: "Select one or more text layers.",
+        anchorBox: "Select one or more text layers.",
+        textChain: "Select 2 or more text layers, in the order they should animate.",
+        rectBox: "Select the text layer and the box shape layer.",
+        rectSliders: "Select one or more shape layers.",
+        user: "Select the properties the expression goes on."
+    };
+
+    // Tira o bloco de tutorial do topo: só o código vai para a propriedade.
+    function stripExpressionTutorial(code) {
+        return String(code).replace(/^\s*\/\*[\s\S]*?\*\/\s*/, "");
+    }
+
+    function quoteExpr(s) {
+        return "\"" + String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
+    }
+
+    function isTextLayer(l) {
+        try { return l instanceof TextLayer; } catch (e) { return false; }
+    }
+
+    function isShapeLayer(l) {
+        try { return l instanceof ShapeLayer; } catch (e) { return false; }
+    }
+
+    function findPropByMatch(group, mn) {
+        if (!group) return null;
+        var n = 0;
+        try { n = group.numProperties; } catch (e) { return null; }
+
+        for (var i = 1; i <= n; i++) {
+            var p = group.property(i);
+            if (!p) continue;
+            if (p.matchName === mn) return p;
+            if (p.numProperties !== undefined) {
+                var hit = findPropByMatch(p, mn);
+                if (hit) return hit;
+            }
+        }
+
+        return null;
+    }
+
+    function textAnimators(layer) {
+        return layer.property("ADBE Text Properties").property("ADBE Text Animators");
+    }
+
+    // Animator com Opacity 0 e um Range Selector (reaproveita se já existir).
+    // Depois de cada addProperty o After invalida as referências, por isso
+    // tudo é buscado de novo pelo índice.
+    function ensureTextReveal(layer) {
+        var anims = textAnimators(layer);
+        var i;
+
+        for (i = 1; i <= anims.numProperties; i++) {
+            var an = anims.property(i);
+            var sels = an.property("ADBE Text Selectors");
+            var props = an.property("ADBE Text Animator Properties");
+            if (sels && sels.numProperties > 0 && props && props.property("ADBE Text Opacity")) {
+                return {ai: i, anim: an.name, sel: sels.property(1).name};
+            }
+        }
+
+        var ai = anims.addProperty("ADBE Text Animator").propertyIndex;
+        textAnimators(layer).property(ai).property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
+        textAnimators(layer).property(ai).property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
+        textAnimators(layer).property(ai).property("ADBE Text Selectors").addProperty("ADBE Text Selector");
+
+        var made = textAnimators(layer).property(ai);
+        return {ai: ai, anim: made.name, sel: made.property("ADBE Text Selectors").property(1).name};
+    }
+
+    function textStartProp(layer, info) {
+        return textAnimators(layer).property(info.ai)
+            .property("ADBE Text Selectors").property(1)
+            .property("ADBE Text Percent Start");
+    }
+
+    // Garante um retângulo na shape (cria Rectangle + Fill se não tiver).
+    function ensureRectangle(layer) {
+        var root = layer.property("ADBE Root Vectors Group");
+        if (findPropByMatch(root, "ADBE Vector Rect Size")) return;
+
+        root.addProperty("ADBE Vector Shape - Rect");
+        layer.property("ADBE Root Vectors Group").addProperty("ADBE Vector Graphic - Fill");
+    }
+
+    function rectSizeProp(layer) {
+        return findPropByMatch(layer.property("ADBE Root Vectors Group"), "ADBE Vector Rect Size");
+    }
+
+    function transformProp(layer, mn) {
+        try {
+            return layer.property("ADBE Transform Group").property(mn);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Nomes de Slider Control usados pela própria camada: effect("X")("Slider").
+    function sliderNamesIn(code) {
+        var out = [];
+        var re = /effect\("([^"]+)"\)\("Slider"\)/g;
+        var m;
+
+        while ((m = re.exec(code)) !== null) {
+            var seen = false;
+            for (var i = 0; i < out.length; i++) if (out[i] === m[1]) seen = true;
+            if (!seen) out.push(m[1]);
+        }
+
+        return out;
+    }
+
+    function setSliderValue(layer, name, v) {
+        try {
+            layer.property("ADBE Effect Parade").property(name).property(1).setValue(v);
+        } catch (e) {}
+    }
+
+    // Aplica um atalho nas camadas selecionadas. Devolve {applied, skipped, errors, warnings, msg}.
+    function applyExpressionToLayers(entry, comp) {
+        var res = {applied: 0, skipped: 0, errors: [], warnings: [], msg: ""};
+        var kind = entry.target;
+        var base = stripExpressionTutorial(entry.code);
+        var layers = [];
+        var i;
+
+        try {
+            var sel = comp.selectedLayers;
+            for (i = 0; i < sel.length; i++) layers.push(sel[i]);
+        } catch (eSel) {}
+
+        function put(prop, code, label) {
+            if (!prop) {
+                res.skipped++;
+                return;
+            }
+
+            try {
+                prop.expression = code;
+                res.applied++;
+
+                var err = "";
+                try { err = prop.expressionError; } catch (eE) {}
+                if (err) res.warnings.push(label + ": " + err);
+            } catch (e) {
+                res.errors.push(label + ": " + e.toString().replace("Error: ", ""));
+            }
+        }
+
+        // Cria os Slider Control que o código usa e devolve quais eram novos.
+        function sliders(layer, code) {
+            var names = sliderNamesIn(code);
+            var created = [];
+            for (var s = 0; s < names.length; s++) {
+                try {
+                    if (ensureSliderControl(layer, names[s])) created.push(names[s]);
+                } catch (eFx) {}
+            }
+            return created;
+        }
+
+        // Expressão salva por você: vai nas propriedades selecionadas.
+        if (kind === "user" || kind === "any") {
+            var props = collectSelectedExpressionProperties();
+
+            if (props.length) {
+                for (i = 0; i < props.length; i++) {
+                    var pn = "Property";
+                    try { pn = props[i].name; } catch (eN) {}
+                    put(props[i], base, pn);
+                }
+                return res;
+            }
+
+            if (kind === "user") {
+                res.msg = EXPRESSION_NEED_MSG.user;
+                return res;
+            }
+
+            kind = "position";
+        }
+
+        if (layers.length === 0) {
+            res.msg = "Select one or more layers.";
+            return res;
+        }
+
+        if (kind === "position" || kind === "rotation" || kind === "scale" || kind === "scale3d") {
+            var mn = kind === "position" ? "ADBE Position" : kind === "rotation" ? "ADBE Rotate Z" : "ADBE Scale";
+
+            for (i = 0; i < layers.length; i++) {
+                var L = layers[i];
+                if (kind === "scale3d") {
+                    try { if (!L.threeDLayer) L.threeDLayer = true; } catch (e3) {}
+                }
+                sliders(L, base);
+
+                var tp = transformProp(L, mn);
+                if (tp && kind === "position") {
+                    var sep = false;
+                    try { sep = tp.dimensionsSeparated; } catch (eSep) {}
+                    if (sep) {
+                        res.errors.push(L.name + ": Position has separated dimensions");
+                        continue;
+                    }
+                }
+                put(tp, base, L.name);
+            }
+
+            return res;
+        }
+
+        if (kind === "sourceText" || kind === "anchorBox" || kind === "textStart") {
+            for (i = 0; i < layers.length; i++) {
+                var T = layers[i];
+                if (!isTextLayer(T)) {
+                    res.skipped++;
+                    continue;
+                }
+
+                var code = base;
+                if (kind === "anchorBox") code = code.replace(/thisComp\.layer\("[^"]*"\)/g, "thisLayer");
+
+                var info = kind === "textStart" ? ensureTextReveal(T) : null;
+                sliders(T, code);
+
+                var target =
+                    kind === "sourceText" ? T.property("ADBE Text Properties").property("ADBE Text Document") :
+                    kind === "anchorBox" ? transformProp(T, "ADBE Anchor Point") :
+                    textStartProp(T, info);
+
+                put(target, code, T.name);
+            }
+
+            if (res.applied === 0 && !res.errors.length) res.msg = EXPRESSION_NEED_MSG[kind];
+            return res;
+        }
+
+        if (kind === "textChain") {
+            var texts = [];
+            for (i = 0; i < layers.length; i++) {
+                if (isTextLayer(layers[i])) texts.push(layers[i]);
+                else res.skipped++;
+            }
+
+            if (texts.length < 2) {
+                res.msg = EXPRESSION_NEED_MSG.textChain;
+                return res;
+            }
+
+            var infos = [];
+            for (i = 0; i < texts.length; i++) infos.push(ensureTextReveal(texts[i]));
+
+            for (i = 1; i < texts.length; i++) {
+                var prev = texts[i - 1];
+                var c2 = base
+                    .replace(/\.layer\("[^"]*"\)/g, ".layer(" + quoteExpr(prev.name) + ")")
+                    .replace(/\.animator\("[^"]*"\)/g, ".animator(" + quoteExpr(infos[i - 1].anim) + ")")
+                    .replace(/\.selector\("[^"]*"\)/g, ".selector(" + quoteExpr(infos[i - 1].sel) + ")");
+
+                put(textStartProp(texts[i], infos[i]), c2, texts[i].name);
+            }
+
+            return res;
+        }
+
+        if (kind === "rectBox" || kind === "rectSliders") {
+            var textRef = null;
+            var shapes = [];
+
+            for (i = 0; i < layers.length; i++) {
+                if (isShapeLayer(layers[i])) shapes.push(layers[i]);
+                else if (isTextLayer(layers[i]) && !textRef) textRef = layers[i];
+                else res.skipped++;
+            }
+
+            if (shapes.length === 0 || (kind === "rectBox" && !textRef)) {
+                res.msg = EXPRESSION_NEED_MSG[kind];
+                return res;
+            }
+
+            for (i = 0; i < shapes.length; i++) {
+                var S = shapes[i];
+                ensureRectangle(S);
+
+                var c3 = kind === "rectBox"
+                    ? base.replace(/thisComp\.layer\("[^"]*"\)/g, "thisComp.layer(" + quoteExpr(textRef.name) + ")")
+                    : base.replace(/thisComp\.layer\("[^"]*"\)\.effect/g, "effect");
+
+                var size = [100, 100];
+                try { size = rectSizeProp(S).value; } catch (eSz) {}
+
+                var made = sliders(S, c3);
+                var names = sliderNamesIn(c3);
+
+                for (var k = 0; k < made.length; k++) {
+                    if (kind === "rectBox") setSliderValue(S, made[k], 40); // margem
+                    else for (var nn = 0; nn < names.length && nn < 2; nn++) {
+                        if (names[nn] === made[k]) setSliderValue(S, made[k], size[nn]);
+                    }
+                }
+
+                put(rectSizeProp(S), c3, S.name);
+            }
+
+            return res;
+        }
+
+        return res;
+    }
+
     function buildExpressionsTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
         tab.spacing = 4;
         tab.margins = [0, 3, 0, 0];
 
-        var ALL = "All";
-        var MINE = "★ Mine";
-
+        var rows = []; // linha da lista → entrada (null = título de categoria)
         var favorites = loadExpressionFavorites();
-        var shown = [];     // entradas do dropdown, na mesma ordem (null = separador)
-        var current = null; // entrada carregada no editor
-        var busy = false;
 
-        // ----- escolher -----
-        var pickRow = tab.add("group");
-        pickRow.orientation = "row";
-        pickRow.alignChildren = ["fill", "center"];
-        pickRow.spacing = 4;
+        var list = tab.add("listbox", undefined, [], {multiselect: false});
+        list.alignment = ["fill", "top"];
+        list.preferredSize = [60, 300];
+        list.helpTip = "Pick an expression, select the layers and click APPLY (or double-click)";
 
-        var ddCat = pickRow.add("dropdownlist", undefined, []);
-        ddCat.preferredSize.width = 92;
-        ddCat.helpTip = "Category";
+        var hint = uiFlex(uiLabel(tab, ""), 60);
 
-        var ddExpr = pickRow.add("dropdownlist", undefined, []);
-        uiFlex(ddExpr);
-        ddExpr.helpTip = "Pick an expression to see its tutorial and apply it";
+        var btnApply = uiIconButton(tab, {icon: "value", label: "APPLY", primary: true, height: 24,
+            tip: "Apply to the selected layers"});
+        btnApply.alignment = ["fill", "top"];
 
-        var infoText = uiFlex(uiLabel(tab, ""), 60);
+        var status = addStatus(tab, "Select the layers and click APPLY.");
 
-        // ----- código -----
-        var txtCode = tab.add("edittext", undefined, "", {
-            multiline: true,
-            scrolling: true,
-            wantReturn: true
-        });
-        txtCode.alignment = ["fill", "top"];
-        txtCode.preferredSize = [60, 96];
-
-        // ----- nome + ações em ícones -----
-        var nameRow = tab.add("group");
-        nameRow.orientation = "row";
-        nameRow.alignChildren = ["fill", "center"];
-        nameRow.spacing = 3;
-
-        var txtName = uiFlex(nameRow.add("edittext", undefined, ""));
-        txtName.helpTip = "Name (to save to your favorites)";
-
-        var btnNew = uiIconButton(nameRow, {icon: "plus", tip: "New: clears the editor"});
-        var btnCapture = uiIconButton(nameRow, {icon: "capture", tip: "Capture: copies the expression from the selected property"});
-        var btnSave = uiIconButton(nameRow, {icon: "save", tip: "Save to your favorites (★ Mine)"});
-        var btnDelete = uiIconButton(nameRow, {icon: "trash", tip: "Delete one of your favorites"});
-
-        var applyRow = tab.add("group");
-        applyRow.orientation = "row";
-        applyRow.alignChildren = ["fill", "center"];
-        applyRow.spacing = 6;
-
-        var cbNeeds = uiFlex(applyRow.add("checkbox", undefined, "Create controls"));
-        cbNeeds.value = loadSetting("exprCreateControls", "1") === "1";
-        cbNeeds.helpTip = "Create the Slider Control on the layer if the expression needs it";
-
-        var btnApply = uiIconButton(applyRow, {icon: "value", label: "APPLY", primary: true, height: 24,
-            tip: "Apply to the selected properties"});
-        uiFlex(btnApply, 60);
-
-        var status = addStatus(tab, "Pick an expression. The tutorial is at the top of the code.");
-
-        // ----- lógica -----
-
-        function allEntries() {
-            var out = [];
+        function fill() {
+            var lastCat = null;
             var i;
 
-            for (i = 0; i < favorites.length; i++) {
-                out.push({kind: "user", name: favorites[i].name, cat: MINE, target: "—", desc: "", needs: [], code: favorites[i].code});
+            list.removeAll();
+            rows = [];
+
+            function header(t) {
+                list.add("item", "— " + t.toUpperCase() + " —");
+                rows.push(null);
             }
 
             for (i = 0; i < EXPRESSION_LIBRARY.length; i++) {
                 var e = EXPRESSION_LIBRARY[i];
-                out.push({kind: "lib", name: e.name, cat: e.cat, target: e.target, desc: e.desc, needs: e.needs, code: e.code});
-            }
-
-            return out;
-        }
-
-        function refreshCategories() {
-            busy = true;
-            var keep = ddCat.selection ? ddCat.selection.text : loadSetting("exprCategory", ALL);
-            var names = [ALL, MINE];
-            var seen = {};
-
-            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                var c = EXPRESSION_LIBRARY[i].cat;
-                if (!seen["k" + c]) {
-                    seen["k" + c] = true;
-                    names.push(c);
-                }
-            }
-
-            ddCat.removeAll();
-            var pick = 0;
-
-            for (i = 0; i < names.length; i++) {
-                ddCat.add("item", names[i]);
-                if (names[i] === keep) pick = i;
-            }
-
-            ddCat.selection = pick;
-            busy = false;
-        }
-
-        // Dropdown de expressões: separador entre categorias quando "Todas".
-        function refreshList(keepName) {
-            var cat = ddCat.selection ? ddCat.selection.text : ALL;
-            var entries = allEntries();
-            var lastCat = null;
-            var pick = 0;
-
-            busy = true;
-            ddExpr.removeAll();
-            shown = [];
-
-            ddExpr.add("item", "— pick an expression —");
-            shown.push(null);
-
-            for (var i = 0; i < entries.length; i++) {
-                var e = entries[i];
-                if (cat !== ALL && e.cat !== cat) continue;
-
-                if (cat === ALL && e.cat !== lastCat) {
-                    ddExpr.add("separator");
-                    shown.push(null);
+                if (e.cat !== lastCat) {
+                    header(e.cat);
                     lastCat = e.cat;
                 }
-
-                ddExpr.add("item", (e.kind === "user" ? "★ " : "") + e.name);
-                shown.push(e);
-                if (keepName && keepName === e.name) pick = shown.length - 1;
+                list.add("item", "   " + e.name);
+                rows.push({name: e.name, code: e.code, target: EXPRESSION_TARGETS[i] || "any",
+                    hint: EXPRESSION_HINTS[i] || ""});
             }
 
-            ddExpr.selection = pick;
-            busy = false;
+            if (favorites.length) {
+                header("★ Mine");
+                for (i = 0; i < favorites.length; i++) {
+                    list.add("item", "   " + favorites[i].name);
+                    rows.push({name: favorites[i].name, code: favorites[i].code, target: "user",
+                        hint: "Saved by you: goes on the selected properties."});
+                }
+            }
+
+            var keep = loadSetting("exprPick", "");
+            var pick = 1;
+            for (i = 0; i < rows.length; i++) {
+                if (rows[i] && rows[i].name === keep) pick = i;
+            }
+            list.selection = pick;
+            showHint();
         }
 
-        function describe(e) {
+        function current() {
+            if (!list.selection) return null;
+            return rows[list.selection.index] || null;
+        }
+
+        function showHint() {
+            var e = current();
+            hint.text = e ? e.hint : "";
+        }
+
+        var moving = false;
+        list.onChange = function () {
+            if (moving || !list.selection) return;
+            var idx = list.selection.index;
+
+            // título de categoria: pula para a primeira expressão dele
+            if (!rows[idx] && idx + 1 < rows.length) {
+                moving = true;
+                list.selection = idx + 1;
+                moving = false;
+            }
+
+            var e = current();
+            if (e) saveSetting("exprPick", e.name);
+            showHint();
+        };
+
+        function apply() {
+            var e = current();
             if (!e) {
-                infoText.text = "";
-                infoText.helpTip = "";
+                alert("Pick an expression from the list.");
                 return;
             }
 
-            if (e.kind === "user") {
-                infoText.text = "Expression saved by you.";
-                infoText.helpTip = "";
+            var comp = app.project ? app.project.activeItem : null;
+            if (!isComp(comp)) {
+                alert("Open a composition.");
                 return;
             }
 
-            infoText.text = "Apply to: " + e.target + (e.needs.length ? "   ·   Needs: " + e.needs.join(", ") : "");
-            infoText.helpTip = e.desc + "\n" + infoText.text;
-        }
-
-        function loadSelected() {
-            if (busy || !ddExpr.selection) return;
-
-            var e = shown[ddExpr.selection.index];
-            if (!e) return;
-
-            current = e;
-            txtName.text = e.name;
-            txtCode.text = e.code;
-            describe(e);
-            status.text = e.desc || ("Favorite: " + e.name);
-        }
-
-        function applyCurrentExpression() {
-            var code = txtCode.text;
-
-            if (trimString(code) === "") {
-                alert("The expression is empty.");
-                return;
-            }
-
-            var props = collectSelectedExpressionProperties();
-
-            if (props.length === 0) {
-                alert("Select one or more properties that accept expressions.");
-                return;
-            }
-
-            // Só cria controles se a expressão no editor ainda é a do atalho.
-            var needs = (current && current.kind === "lib" && current.code === code) ? current.needs : [];
-            var applied = 0;
-            var created = 0;
-            var errors = [];
-            var warnings = [];
-            var i;
-
-            saveSetting("exprCreateControls", cbNeeds.value ? "1" : "0");
-
-            app.beginUndoGroup("Mesmo Tools - Expression" + (current ? " " + current.name : ""));
-
+            var res;
+            app.beginUndoGroup("Mesmo Tools - Expression " + e.name);
             try {
-                if (needs.length && cbNeeds.value) {
-                    var refs = [];
-                    for (i = 0; i < props.length; i++) refs.push(propertyPath(props[i]));
-
-                    for (i = 0; i < refs.length; i++) {
-                        for (var n = 0; n < needs.length; n++) {
-                            try {
-                                if (ensureSliderControl(refs[i].layer, needs[n])) created++;
-                            } catch (eFx) {}
-                        }
-                    }
-
-                    // Adicionar efeitos invalida as referências: reencontra as propriedades.
-                    props = [];
-                    for (i = 0; i < refs.length; i++) {
-                        try { props.push(resolvePropertyPath(refs[i])); } catch (eRes) {}
-                    }
-                }
-
-                for (i = 0; i < props.length; i++) {
-                    var propName = "Property";
-                    try { propName = props[i].name; } catch (nameErr) {}
-
-                    try {
-                        props[i].expression = code;
-                        applied++;
-
-                        var exprErr = "";
-                        try { exprErr = props[i].expressionError; } catch (eErr) {}
-                        if (exprErr) warnings.push(propName + ": " + exprErr);
-                    } catch (e) {
-                        errors.push(propName + ": " + e.toString().replace("Error: ", ""));
-                    }
-                }
+                res = applyExpressionToLayers(e, comp);
             } finally {
                 app.endUndoGroup();
             }
 
-            status.text =
-                applied + " propert(ies) updated" +
-                (created ? " | " + created + " Slider Control(s) created" : "") +
-                (errors.length ? " | " + errors.length + " error(s)" : "") +
-                (warnings.length ? " | " + warnings.length + " with expression errors" : "") +
-                ".";
+            if (res.applied === 0 && res.msg) {
+                status.text = res.msg;
+                alert(res.msg);
+                return;
+            }
 
-            if (errors.length || warnings.length) {
+            status.text =
+                e.name + ": " + res.applied + " applied" +
+                (res.skipped ? " | " + res.skipped + " layer(s) skipped" : "") +
+                (res.errors.length ? " | " + res.errors.length + " error(s)" : "") + ".";
+
+            if (res.errors.length || res.warnings.length) {
                 var msg = "";
-                if (errors.length) {
-                    msg += "Could not apply to:\n" + errors.join("\n");
-                }
-                if (warnings.length) {
+                if (res.errors.length) msg += "Could not apply to:\n" + res.errors.join("\n");
+                if (res.warnings.length) {
                     if (msg) msg += "\n\n";
-                    msg += "Applied, but the expression has an error in:\n" + warnings.join("\n") +
-                        "\n\nCheck the tutorial at the top of the expression: you may need to " +
-                        "rename a layer or create a control.";
+                    msg += "Applied, but the expression has an error in:\n" + res.warnings.join("\n");
                 }
                 alert(msg);
             }
         }
 
-        ddCat.onChange = function () {
-            if (busy || !ddCat.selection) return;
-            saveSetting("exprCategory", ddCat.selection.text);
-            refreshList(current ? current.name : null);
-        };
+        list.onDoubleClick = apply;
+        btnApply.onClick = apply;
 
-        ddExpr.onChange = loadSelected;
-
-        btnNew.onClick = function () {
-            current = null;
-            ddExpr.selection = 0;
-            txtName.text = "";
-            txtCode.text = "";
-            describe(null);
-            status.text = "New expression: write or capture it, name it and save.";
-        };
-
-        btnSave.onClick = function () {
-            var name = trimString(txtName.text);
-            var code = txtCode.text;
-
-            if (name === "") {
-                alert("Give the expression a name.");
-                return;
-            }
-
-            if (trimString(code) === "") {
-                alert("The expression is empty.");
-                return;
-            }
-
-            // Um atalho do Mesmo nunca é sobrescrito: vira uma cópia sua.
-            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                if (EXPRESSION_LIBRARY[i].name === name) {
-                    name += " (mine)";
-                    break;
-                }
-            }
-
-            var idx = findFavoriteIndex(favorites, name);
-
-            if (idx === -1) favorites.push({name: name, code: code});
-            else favorites[idx].code = code;
-
-            if (saveExpressionFavorites(favorites)) {
-                current = {kind: "user", name: name, cat: MINE, target: "—", desc: "", needs: [], code: code};
-                txtName.text = name;
-                refreshList(name);
-                describe(current);
-                status.text = "Saved to ★ Mine: " + name;
-            }
-        };
-
-        btnDelete.onClick = function () {
-            if (current && current.kind === "lib") {
-                alert("Mesmo shortcuts can't be deleted. Only your favorites (★ Mine).");
-                return;
-            }
-
-            var name = trimString(txtName.text);
-            if (name === "" && current) name = current.name;
-
-            var idx = findFavoriteIndex(favorites, name);
-
-            if (idx === -1) {
-                alert("Select one of your favorites to delete.");
-                return;
-            }
-
-            if (!confirm("Delete the expression \"" + name + "\"?")) return;
-
-            favorites.splice(idx, 1);
-
-            if (saveExpressionFavorites(favorites)) {
-                current = null;
-                txtName.text = "";
-                txtCode.text = "";
-                describe(null);
-                refreshList(null);
-                status.text = "Expression deleted: " + name;
-            }
-        };
-
-        btnCapture.onClick = function () {
-            var props = collectSelectedExpressionProperties();
-
-            if (props.length === 0) {
-                alert("Select a property with an expression.");
-                return;
-            }
-
-            var captured = "";
-            try { captured = props[0].expression; } catch (e) {}
-
-            if (trimString(captured) === "") {
-                alert("The first selected property has no expression.");
-                return;
-            }
-
-            current = null;
-            ddExpr.selection = 0;
-            txtCode.text = captured;
-            describe(null);
-
-            if (trimString(txtName.text) === "") {
-                try { txtName.text = props[0].name; } catch (nameErr) { txtName.text = "Expression"; }
-            }
-
-            status.text = "Expression captured. Name it and save.";
-        };
-
-        btnApply.onClick = applyCurrentExpression;
-
-        refreshCategories();
-        refreshList(null);
+        fill();
     }
 
     // ================================================================
