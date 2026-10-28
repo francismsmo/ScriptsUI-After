@@ -2,14 +2,14 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-**Versão atual: v2.16** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
+**Versão atual: v2.17** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
 
 > **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface in English. Install it the same way. See [English version](#english-version) below.
 
 O painel tem 4 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
 
 - **Animação** = Curvas + Explode
-- **Camadas** = Criar + Anchor Point · Extract + Batidas
+- **Camadas** = Criar + Anchor Point · Extract · Align + Batidas
 - **Comps** = Ajustes + Duplicar + 3D / Blur
 - **Expressões** (lista: escolha, selecione as camadas e aplique)
 
@@ -21,15 +21,16 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 
 | Ferramenta | O que faz |
 |---|---|
-| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e três modos: **Clássico** (easy ease com influência ajustável), **Valor** e **Velocidade** (editor ao vivo): escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
+| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e três modos: **Clássico** (easy ease com influência ajustável), **Valor** e **Velocidade** (editor ao vivo): escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite, exclua e resete suas curvas. |
 | **Criar** | Uma linha de ícones para criar Texto, Adjustment Layer, Null, Sólido (com seletor de cor), Shape, Câmera e Luz na comp aberta, logo acima da camada selecionada. **Null na Position:** selecione uma ou mais camadas (não precisa abrir a Position) e ele cria um único null que controla a Position de todas. O nome segue `NomeDaCamada-position-null`. |
 | **Anchor Point** | Grade 3×3: move o Anchor Point para uma quina, borda ou o centro das camadas selecionadas sem tirá-las do lugar. |
+| **Align** | Alinha as camadas selecionadas na seleção ou na composição (esquerda, centro, direita, topo, meio, base) e distribui 3 ou mais camadas com o mesmo espaço, como o painel Align do After. Animações de Position são deslocadas inteiras. |
 | **Extract** | Separa cada grupo de uma shape layer em uma camada própria, na mesma posição e ordem. Fills e strokes soltos no topo vão junto em cada peça. Pode centralizar o anchor de cada peça e apagar ou só esconder a original. |
 | **Batidas** | Analisa o áudio da camada selecionada e cria um marcador em cada batida. Tem ajuste de sensibilidade, intervalo mínimo entre marcadores, opção de apagar os marcadores antigos e de numerar. |
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
-| **Expressões** | Lista com 18 atalhos (delay, wiggle, texto, contadores, caixa reativa, 3D…). Escolha um, selecione as camadas e clique em **APLICAR**: o painel acha a propriedade certa e cria o que faltar (Slider Control, animator de texto, retângulo, 3D). Caixa reativa: selecione o texto e a shape. Encadear texto: selecione os textos na ordem. |
+| **Expressões** | Lista com 18 atalhos (delay, wiggle, texto, contadores, caixa reativa, 3D…). Escolha um, selecione as camadas e clique em **APLICAR**: o painel acha a propriedade certa e cria o que faltar (Slider Control, animator de texto, retângulo, 3D). Caixa reativa: selecione o texto e a shape. Encadear texto: selecione os textos na ordem. Com o **+** você adiciona as suas (nome, onde vai e o código); a lixeira exclui. |
 | **3D / Blur** | Botões de ícone Ligar/Desligar para o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
 
 ## Instalação
@@ -47,9 +48,9 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 
 - **Selecione as keyframes** (duas ou mais vizinhas, em uma ou várias propriedades) e mexa no editor: a timeline atualiza na hora. Com uma keyframe só, a curva vai no trecho até a próxima.
 - **Dropdown:** escolher uma curva já aplica.
-- **Alças:** arraste para ajustar ao vivo; Shift arredonda os valores. Se o mouse sair do editor, a alça é solta ali.
+- **Alças:** arraste para ajustar ao vivo; segurando Shift, a alça só anda no eixo em que você arrastou mais (só para os lados ou só para cima/baixo). Se o mouse sair do editor, a alça é solta ali.
 - **Modos Clássico / Valor / Velocidade** (seletor com ícones acima do editor). *Valor* e *Velocidade*: *Valor* mostra a curva bezier; *Velocidade* mostra o speed graph, como no Graph Editor do After. Nele, cada alça é a influência (para os lados) e a velocidade da keyframe (para cima e para baixo). A linha tracejada é a velocidade média do trecho (1×).
-- **★ / Salvar / Excluir** (ícones ao lado do dropdown): guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown) ou apaga.
+- **★ / Salvar / Excluir / Resetar** (ícones ao lado do dropdown): guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown), apaga, ou volta para a curva padrão (0.333, 0, 0.667, 1) aplicando nas keys.
 - **Clássico:** troca o gráfico por três sliders: o easy ease do After com a influência ajustável, keyframe por keyframe (velocidade 0, como o F9).
   - **<** Entrada: influência do lado que chega em cada keyframe.
   - **>** Saída: influência do lado que sai.

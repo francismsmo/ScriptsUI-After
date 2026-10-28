@@ -1,7 +1,18 @@
 # Mesmo Tools — histórico de versões
 
-A versão aparece no canto do cabeçalho do painel (ex.: `v2.16`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
+A versão aparece no canto do cabeçalho do painel (ex.: `v2.17`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
 A versão em inglês (`MesmoTools_EN.jsx`) tem sempre o mesmo número da portuguesa.
+
+## v2.17 — 28/10/2026
+- **Align** (Camadas, embaixo do Anchor Point), igual ao painel Align do After:
+  - "Alinhar em": **Seleção** ou **Composição** (com uma camada só, alinha na comp);
+  - 6 botões de alinhar: esquerda, centro horizontal, direita, topo, centro vertical, base;
+  - 6 botões de distribuir (3 ou mais camadas): topo, centro vertical, base, esquerda, centro horizontal, direita.
+  - Usa o retângulo visível da camada (com escala, rotação e parent). Se a Position tem keyframes, a animação inteira é deslocada junto. Câmeras, luzes e camadas bloqueadas ficam de fora.
+- **Curvas:**
+  - botão **Resetar** ao lado do dropdown: volta a curva para 0.333, 0, 0.667, 1 e aplica nas keyframes selecionadas (no modo Clássico, volta a influência para 33,33%);
+  - **Shift trava o eixo** ao arrastar uma alça: arrastando para os lados mexe só na horizontal, para cima/baixo só na vertical (vale para Valor e Velocidade). O Shift não arredonda mais os valores.
+- **Expressões:** botão **+** para adicionar uma expressão sua (nome, onde ela vai e o código; se uma propriedade com expressão estiver selecionada, o código já vem preenchido) e lixeira para excluir. As suas ficam no topo da lista, em ★ Minhas, e também aplicam direto nas camadas selecionadas quando você escolhe Position, Scale, Rotation, Opacity, Anchor Point ou Source Text.
 
 ## v2.16 — 28/10/2026
 - **Expressões em lista:** todos os atalhos numa lista só, separados por categoria. Escolha um, selecione as camadas e clique em **APLICAR** (ou dê dois cliques na lista).

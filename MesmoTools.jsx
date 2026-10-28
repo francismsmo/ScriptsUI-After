@@ -12,9 +12,12 @@
     - speed_curves.txt          (curvas)
     - expression_favorites.txt  (expressões)
 
-    Versão atual: v2.16 (mude SCRIPT_VERSION a cada alteração: 2.17, 2.18...)
+    Versão atual: v2.17 (mude SCRIPT_VERSION a cada alteração: 2.18, 2.19...)
     Histórico completo em CHANGELOG.md.
 
+    v2.17 - Align/Distribute embaixo do Anchor Point; botão de resetar a
+            curva; Shift trava o eixo no editor de curvas; adicionar e
+            excluir expressões suas na aba Expressões.
     v2.16 - Expressões em lista: escolha, selecione as camadas e clique
             em APLICAR. O painel acha a propriedade e cria o que faltar.
     v2.15 - Volta a aba Expressões, compacta: dropdowns de categoria e
@@ -61,7 +64,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.16";
+    var SCRIPT_VERSION = "2.17";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -505,6 +508,103 @@
                 g.fillPath(uiBrush(g, c));
             }
         }
+    };
+
+    // Ícones do Align: barra de referência + dois blocos (como no painel Align do After).
+    // axis "x" = alinha na horizontal (esquerda/centro/direita), "y" = na vertical.
+    function iconAlign(g, x, y, s, c, axis, pos) {
+        var b = uiBrush(g, c);
+        var lens = [s * 0.82, s * 0.5];
+        var th = Math.max(2, Math.round(s * 0.24));
+        var off = [Math.round(s * 0.14), Math.round(s * 0.58)];
+        var line = pos === 0 ? 0 : pos === 1 ? s - 1.5 : s / 2 - 0.75;
+
+        g.newPath();
+        if (axis === "x") g.rectPath(x + line, y, 1.5, s);
+        else g.rectPath(x, y + line, s, 1.5);
+        g.fillPath(b);
+
+        for (var i = 0; i < 2; i++) {
+            var len = lens[i];
+            var start = pos === 0 ? 2 : pos === 1 ? s - 2 - len : (s - len) / 2;
+            g.newPath();
+            if (axis === "x") g.rectPath(x + start, y + off[i], len, th);
+            else g.rectPath(x + off[i], y + start, th, len);
+            g.fillPath(b);
+        }
+    }
+
+    // Ícones do Distribute: dois blocos e uma linha passando na borda/centro de cada um.
+    function iconDistribute(g, x, y, s, c, axis, pos) {
+        var b = uiBrush(g, c);
+        var th = Math.max(3, Math.round(s * 0.26));
+        var len = s * 0.6;
+        var starts = [Math.round(s * 0.08), Math.round(s * 0.66) - th + 2];
+
+        for (var i = 0; i < 2; i++) {
+            var st = starts[i];
+            var ref = pos === 0 ? st : pos === 1 ? st + th - 1.5 : st + th / 2 - 0.75;
+
+            g.newPath();
+            if (axis === "y") {
+                g.rectPath(x + (s - len) / 2, y + st, len, th);
+            } else {
+                g.rectPath(x + st, y + (s - len) / 2, th, len);
+            }
+            g.fillPath(b);
+
+            g.newPath();
+            if (axis === "y") g.rectPath(x, y + ref, s, 1.5);
+            else g.rectPath(x + ref, y, 1.5, s);
+            g.fillPath(b);
+        }
+    }
+
+    (function () {
+        var defs = [
+            ["alignL", "x", 0, 0], ["alignHC", "x", 2, 0], ["alignR", "x", 1, 0],
+            ["alignT", "y", 0, 0], ["alignVC", "y", 2, 0], ["alignB", "y", 1, 0],
+            ["distT", "y", 0, 1], ["distVC", "y", 2, 1], ["distB", "y", 1, 1],
+            ["distL", "x", 0, 1], ["distHC", "x", 2, 1], ["distR", "x", 1, 1]
+        ];
+
+        function make(d) {
+            return function (g, x, y, s, c) {
+                if (d[3]) iconDistribute(g, x, y, s, c, d[1], d[2]);
+                else iconAlign(g, x, y, s, c, d[1], d[2]);
+            };
+        }
+
+        for (var i = 0; i < defs.length; i++) ICONS[defs[i][0]] = make(defs[i]);
+    })();
+
+    // Resetar: seta circular.
+    ICONS.reset = function (g, x, y, s, c) {
+        var cx = x + s / 2;
+        var cy = y + s / 2 + 0.5;
+        var r = s * 0.38;
+        var i;
+
+        g.newPath();
+        for (i = 0; i <= 14; i++) {
+            var a = (-60 + i * 20) * Math.PI / 180;
+            var px = cx + r * Math.cos(a);
+            var py = cy + r * Math.sin(a);
+            if (i === 0) g.moveTo(px, py);
+            else g.lineTo(px, py);
+        }
+        g.strokePath(uiPen(g, c, 1.6));
+
+        // ponta da seta no começo do arco (lá em cima, à direita)
+        var a0 = -60 * Math.PI / 180;
+        var tx = cx + r * Math.cos(a0);
+        var ty = cy + r * Math.sin(a0);
+        g.newPath();
+        g.moveTo(tx + 3, ty - 3.5);
+        g.lineTo(tx + 1.5, ty + 2.5);
+        g.lineTo(tx - 3.5, ty - 1);
+        g.closePath();
+        g.fillPath(uiBrush(g, c));
     };
 
     // Traço diagonal por cima: versão "desligar" do ícone.
@@ -2743,13 +2843,14 @@
                 var tabIndex = line.indexOf("\t");
                 if (tabIndex === -1) continue;
 
-                var nameEnc = line.substring(0, tabIndex);
-                var codeEnc = line.substring(tabIndex + 1);
+                // nome \t código [\t onde aplicar]
+                var parts = line.split("\t");
 
                 try {
                     out.push({
-                        name: decodeURIComponent(nameEnc),
-                        code: decodeURIComponent(codeEnc)
+                        name: decodeURIComponent(parts[0]),
+                        code: decodeURIComponent(parts[1]),
+                        target: parts.length > 2 ? decodeURIComponent(parts[2]) : "user"
                     });
                 } catch (decodeErr) {}
             }
@@ -2776,7 +2877,9 @@
                 f.writeln(
                     encodeURIComponent(favorites[i].name) +
                     "\t" +
-                    encodeURIComponent(favorites[i].code)
+                    encodeURIComponent(favorites[i].code) +
+                    "\t" +
+                    encodeURIComponent(favorites[i].target || "user")
                 );
             }
 
@@ -3845,7 +3948,7 @@
             return created;
         }
 
-        // Expressão salva por você: vai nas propriedades selecionadas.
+        // "user" = vai nas propriedades selecionadas; "any" = idem, ou Position.
         if (kind === "user" || kind === "any") {
             var props = collectSelectedExpressionProperties();
 
@@ -3871,8 +3974,10 @@
             return res;
         }
 
-        if (kind === "position" || kind === "rotation" || kind === "scale" || kind === "scale3d") {
-            var mn = kind === "position" ? "ADBE Position" : kind === "rotation" ? "ADBE Rotate Z" : "ADBE Scale";
+        if (kind === "position" || kind === "rotation" || kind === "scale" || kind === "scale3d" ||
+                kind === "opacity" || kind === "anchor") {
+            var mn = kind === "position" ? "ADBE Position" : kind === "rotation" ? "ADBE Rotate Z" :
+                kind === "opacity" ? "ADBE Opacity" : kind === "anchor" ? "ADBE Anchor Point" : "ADBE Scale";
 
             for (i = 0; i < layers.length; i++) {
                 var L = layers[i];
@@ -3995,6 +4100,24 @@
         return res;
     }
 
+    // Onde as expressões que você adiciona podem ir.
+    var EXPRESSION_USER_TARGETS = [
+        ["user", "Propriedade selecionada"],
+        ["position", "Position"],
+        ["scale", "Scale"],
+        ["rotation", "Rotation"],
+        ["opacity", "Opacity"],
+        ["anchor", "Anchor Point"],
+        ["sourceText", "Source Text (texto)"]
+    ];
+
+    function userTargetLabel(t) {
+        for (var i = 0; i < EXPRESSION_USER_TARGETS.length; i++) {
+            if (EXPRESSION_USER_TARGETS[i][0] === t) return EXPRESSION_USER_TARGETS[i][1];
+        }
+        return EXPRESSION_USER_TARGETS[0][1];
+    }
+
     function buildExpressionsTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
@@ -4011,13 +4134,64 @@
 
         var hint = uiFlex(uiLabel(tab, ""), 60);
 
-        var btnApply = uiIconButton(tab, {icon: "value", label: "APLICAR", primary: true, height: 24,
+        var actRow = tab.add("group");
+        actRow.orientation = "row";
+        actRow.alignChildren = ["left", "center"];
+        actRow.spacing = 3;
+
+        var btnAdd = uiIconButton(actRow, {icon: "plus", tip: "Adicionar uma expressão sua"});
+        var btnDel = uiIconButton(actRow, {icon: "trash", tip: "Excluir a expressão sua escolhida na lista"});
+        var btnApply = uiIconButton(actRow, {icon: "value", label: "APLICAR", primary: true, height: 24,
             tip: "Aplicar nas camadas selecionadas"});
-        btnApply.alignment = ["fill", "top"];
+        uiFlex(btnApply, 60);
+        btnApply.alignment = ["fill", "center"];
+
+        // ----- nova expressão (aparece ao clicar no +) -----
+        var addBox = tab.add("group");
+        addBox.orientation = "column";
+        addBox.alignment = ["fill", "top"];
+        addBox.alignChildren = ["fill", "top"];
+        addBox.spacing = 3;
+        addBox.margins = [0, 4, 0, 2];
+
+        var nameRow = addBox.add("group");
+        nameRow.orientation = "row";
+        nameRow.alignChildren = ["left", "center"];
+        nameRow.spacing = 4;
+        uiLabel(nameRow, "Nome:").preferredSize.width = 44;
+        var txtName = uiFlex(nameRow.add("edittext", undefined, ""));
+        txtName.alignment = ["fill", "center"];
+
+        var tgtRow = addBox.add("group");
+        tgtRow.orientation = "row";
+        tgtRow.alignChildren = ["left", "center"];
+        tgtRow.spacing = 4;
+        uiLabel(tgtRow, "Vai em:").preferredSize.width = 44;
+        var tgtNames = [];
+        for (var ti = 0; ti < EXPRESSION_USER_TARGETS.length; ti++) tgtNames.push(EXPRESSION_USER_TARGETS[ti][1]);
+        var ddTarget = uiFlex(tgtRow.add("dropdownlist", undefined, tgtNames), 60);
+        ddTarget.alignment = ["fill", "center"];
+        ddTarget.selection = 0;
+        ddTarget.helpTip = "Onde a expressão vai quando você clicar em APLICAR";
+
+        var txtCode = addBox.add("edittext", undefined, "", {multiline: true, scrolling: true, wantReturn: true});
+        txtCode.alignment = ["fill", "top"];
+        txtCode.preferredSize = [60, 90];
+        txtCode.helpTip = "Cole aqui o código da expressão";
+
+        var saveRow = addBox.add("group");
+        saveRow.orientation = "row";
+        saveRow.alignChildren = ["fill", "center"];
+        saveRow.spacing = 4;
+        var btnSave = uiIconButton(saveRow, {icon: "save", label: "SALVAR", primary: true, tip: "Salvar na lista (★ Minhas)"});
+        uiFlex(btnSave, 60);
+        var btnCancel = uiButton(saveRow, "Cancelar");
+
+        uiSetShown(addBox, false);
 
         var status = addStatus(tab, "Selecione as camadas e clique em APLICAR.");
 
-        function fill() {
+        function fill(keepName) {
             var lastCat = null;
             var i;
 
@@ -4027,6 +4201,17 @@
             function header(t) {
                 list.add("item", "— " + t.toUpperCase() + " —");
                 rows.push(null);
+            }
+
+            // as suas primeiro
+            if (favorites.length) {
+                header("★ Minhas");
+                for (i = 0; i < favorites.length; i++) {
+                    var tg = favorites[i].target || "user";
+                    list.add("item", "   " + favorites[i].name);
+                    rows.push({name: favorites[i].name, code: favorites[i].code, target: tg, mine: true,
+                        hint: "Sua expressão: vai em " + userTargetLabel(tg) + "."});
+                }
             }
 
             for (i = 0; i < EXPRESSION_LIBRARY.length; i++) {
@@ -4040,16 +4225,7 @@
                     hint: EXPRESSION_HINTS[i] || ""});
             }
 
-            if (favorites.length) {
-                header("★ Minhas");
-                for (i = 0; i < favorites.length; i++) {
-                    list.add("item", "   " + favorites[i].name);
-                    rows.push({name: favorites[i].name, code: favorites[i].code, target: "user",
-                        hint: "Expressão salva por você: vai nas propriedades selecionadas."});
-                }
-            }
-
-            var keep = loadSetting("exprPick", "");
+            var keep = keepName || loadSetting("exprPick", "");
             var pick = 1;
             for (i = 0; i < rows.length; i++) {
                 if (rows[i] && rows[i].name === keep) pick = i;
@@ -4128,10 +4304,102 @@
             }
         }
 
+        function openAddBox(show) {
+            uiSetShown(addBox, show);
+            requestRelayout();
+        }
+
+        btnAdd.onClick = function () {
+            if (addBox.visible && addBox.maximumSize[1] > 0) {
+                openAddBox(false);
+                return;
+            }
+
+            txtName.text = "";
+            txtCode.text = "";
+            ddTarget.selection = 0;
+
+            // Se uma propriedade com expressão estiver selecionada, já traz o código dela.
+            var props = collectSelectedExpressionProperties();
+            for (var i = 0; i < props.length; i++) {
+                var ex = "";
+                try { ex = props[i].expression; } catch (eEx) {}
+                if (trimString(ex) !== "") {
+                    txtCode.text = ex;
+                    try { txtName.text = props[i].name; } catch (eNm) {}
+                    break;
+                }
+            }
+
+            openAddBox(true);
+            status.text = "Dê um nome, escolha onde vai, cole o código e clique em SALVAR.";
+        };
+
+        btnCancel.onClick = function () {
+            openAddBox(false);
+            status.text = "Selecione as camadas e clique em APLICAR.";
+        };
+
+        btnSave.onClick = function () {
+            var name = trimString(txtName.text);
+            var code = txtCode.text;
+
+            if (name === "") {
+                alert("Dê um nome para a expressão.");
+                return;
+            }
+            if (trimString(code) === "") {
+                alert("Cole o código da expressão.");
+                return;
+            }
+
+            // Um atalho do Mesmo nunca é sobrescrito: vira uma cópia sua.
+            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                if (EXPRESSION_LIBRARY[i].name === name) {
+                    name += " (minha)";
+                    break;
+                }
+            }
+
+            var target = EXPRESSION_USER_TARGETS[ddTarget.selection ? ddTarget.selection.index : 0][0];
+            var idx = findFavoriteIndex(favorites, name);
+
+            if (idx === -1) favorites.push({name: name, code: code, target: target});
+            else {
+                favorites[idx].code = code;
+                favorites[idx].target = target;
+            }
+
+            if (saveExpressionFavorites(favorites)) {
+                fill(name);
+                openAddBox(false);
+                status.text = (idx === -1 ? "Adicionada: " : "Atualizada: ") + name;
+            }
+        };
+
+        btnDel.onClick = function () {
+            var e = current();
+            if (!e || !e.mine) {
+                alert("Escolha uma expressão sua (★ Minhas) para excluir. Os atalhos do Mesmo não podem ser excluídos.");
+                return;
+            }
+
+            if (!confirm("Excluir a expressão \"" + e.name + "\"?")) return;
+
+            var idx = findFavoriteIndex(favorites, e.name);
+            if (idx === -1) return;
+
+            favorites.splice(idx, 1);
+            if (saveExpressionFavorites(favorites)) {
+                fill(null);
+                status.text = "Expressão excluída: " + e.name;
+            }
+        };
+
         list.onDoubleClick = apply;
         btnApply.onClick = apply;
 
-        fill();
+        fill(null);
     }
 
     // ================================================================
@@ -4629,6 +4897,7 @@
         var btnFav = uiIconButton(libRow, {icon: "star", tip: "Favoritar / desfavoritar (favoritas aparecem no topo)"});
         var btnSave = uiIconButton(libRow, {icon: "save", tip: "Salvar a curva do editor na biblioteca (atualiza se o nome já existir)"});
         var btnDelete = uiIconButton(libRow, {icon: "trash", tip: "Excluir a curva escolhida da biblioteca"});
+        var btnReset = uiIconButton(libRow, {icon: "reset", tip: "Resetar a curva (0.333, 0, 0.667, 1) e aplicar nas keyframes selecionadas"});
 
         // ----- Modo: Clássico | Valor | Velocidade -----
         var modeSeg = uiSegmented(tab, [
@@ -4646,7 +4915,7 @@
         var editor = edRow.add("group");
         editor.alignment = ["left", "top"];
         editor.preferredSize = [128, 128];
-        editor.helpTip = "Arraste as alças: as keyframes selecionadas mudam na hora. Shift arredonda.";
+        editor.helpTip = "Arraste as alças: as keyframes selecionadas mudam na hora. Shift trava o eixo (só para os lados ou só para cima/baixo).";
 
         var edSide = edRow.add("group");
         edSide.orientation = "column";
@@ -4929,6 +5198,7 @@
         }
 
         var drag = 0;
+        var dragStart = null;
 
         function drawFrame(g, b, w, h) {
             uiRoundRect(g, 0, 0, w, h, 5);
@@ -5161,6 +5431,10 @@
             drag = Math.min(d1, d2) <= 12 ? (d1 <= d2 ? 1 : 2) : 0;
             if (!drag) return;
 
+            // Ponto de partida, para o Shift travar o eixo.
+            var hp = pts[drag - 1];
+            dragStart = {mx: ev.clientX, my: ev.clientY, vx: edInvX(hp[0], b), vy: edInvY(hp[1], b)};
+
             lib.frozenRange = true; // escala do gráfico parada enquanto arrasta
 
             // Pega as keyframes uma vez, no começo do arraste.
@@ -5194,9 +5468,18 @@
             var vx = Math.max(0, Math.min(1, edInvX(ev.clientX, b)));
             var vy = Math.max(r[0], Math.min(r[1], edInvY(ev.clientY, b)));
 
-            if (ev.shiftKey) {
-                vx = Math.round(vx * 20) / 20;
-                vy = Math.round(vy * (lib.mode === "speed" ? 4 : 20)) / (lib.mode === "speed" ? 4 : 20);
+            // Shift: trava no eixo em que o mouse andou mais desde o clique.
+            var shift = !!ev.shiftKey;
+            if (!shift) {
+                try { shift = ScriptUI.environment.keyboardState.shiftKey === true; } catch (eKb) {}
+            }
+
+            if (shift && dragStart) {
+                if (Math.abs(ev.clientX - dragStart.mx) >= Math.abs(ev.clientY - dragStart.my)) {
+                    vy = Math.max(r[0], Math.min(r[1], dragStart.vy));
+                } else {
+                    vx = Math.max(0, Math.min(1, dragStart.vx));
+                }
             }
 
             var e = lib.edit;
@@ -5392,6 +5675,26 @@
                 refreshDropdown();
                 status.text = (idx === -1 ? "Curva salva: " : "Curva atualizada: ") + name;
             }
+        };
+
+        btnReset.onClick = function () {
+            if (lib.view === "classic") {
+                setClassicValue("both", 33.33, false);
+                classicApply("both", "Mesmo Tools - Resetar ease");
+                return;
+            }
+
+            lib.selected = null;
+            lib.edit = makeCurve("", txtCat.text || "Minhas", 0.333, 0, 0.667, 1, false);
+            txtName.text = "";
+            syncEditorFields();
+            uiRedraw(editor);
+
+            lib.busy = true;
+            try { ddCurves.selection = null; } catch (eSel) {}
+            lib.busy = false;
+
+            applyOnce("Mesmo Tools - Resetar curva");
         };
 
         btnFav.onClick = function () {
@@ -6204,20 +6507,327 @@
         };
     }
 
-    // Anchor Point e Extract juntos, lado a lado.
-    function buildAnchorExtractTab(tab) {
-        tab.orientation = "row";
+    // ---------- align / distribute ----------
+
+    // Matriz 2D da camada (espaço da camada -> espaço da comp), com os parents.
+    // x' = a*x + c*y + e ; y' = b*x + d*y + f
+    function layerMatrix2D(layer, t, depth) {
+        var tg = layer.property("ADBE Transform Group");
+        var ap = tg.property("ADBE Anchor Point").valueAtTime(t, false);
+        var pos;
+        var posProp = tg.property("ADBE Position");
+
+        if (posProp.dimensionsSeparated) {
+            pos = [tg.property("ADBE Position_0").valueAtTime(t, false), tg.property("ADBE Position_1").valueAtTime(t, false)];
+        } else {
+            pos = posProp.valueAtTime(t, false);
+        }
+
+        var sc = [100, 100];
+        try { sc = tg.property("ADBE Scale").valueAtTime(t, false); } catch (eS) {}
+        var rot = 0;
+        try { rot = tg.property("ADBE Rotate Z").valueAtTime(t, false); } catch (eR) {}
+
+        var ang = rot * Math.PI / 180;
+        var sx = sc[0] / 100;
+        var sy = sc[1] / 100;
+        var m = {
+            a: Math.cos(ang) * sx, b: Math.sin(ang) * sx,
+            c: -Math.sin(ang) * sy, d: Math.cos(ang) * sy
+        };
+        m.e = pos[0] - (m.a * ap[0] + m.c * ap[1]);
+        m.f = pos[1] - (m.b * ap[0] + m.d * ap[1]);
+
+        var par = null;
+        try { par = layer.parent; } catch (eP) {}
+
+        if (par && (depth || 0) < 50) {
+            var pm = layerMatrix2D(par, t, (depth || 0) + 1);
+            m = {
+                a: pm.a * m.a + pm.c * m.b, b: pm.b * m.a + pm.d * m.b,
+                c: pm.a * m.c + pm.c * m.d, d: pm.b * m.c + pm.d * m.d,
+                e: pm.a * m.e + pm.c * m.f + pm.e, f: pm.b * m.e + pm.d * m.f + pm.f
+            };
+        }
+
+        return m;
+    }
+
+    // Retângulo visível da camada na comp: {l, t, r, b}.
+    function layerCompBounds(layer, t) {
+        var rc;
+        try { rc = layer.sourceRectAtTime(t, false); } catch (e) { rc = null; }
+        if (!rc || (rc.width === 0 && rc.height === 0)) {
+            try {
+                if (layer.nullLayer) rc = {left: 0, top: 0, width: 100, height: 100};
+            } catch (eN) {}
+        }
+        if (!rc) return null;
+
+        var m = layerMatrix2D(layer, t, 0);
+        var pts = [
+            [rc.left, rc.top], [rc.left + rc.width, rc.top],
+            [rc.left, rc.top + rc.height], [rc.left + rc.width, rc.top + rc.height]
+        ];
+        var bx = {l: Infinity, t: Infinity, r: -Infinity, b: -Infinity};
+
+        for (var i = 0; i < 4; i++) {
+            var x = m.a * pts[i][0] + m.c * pts[i][1] + m.e;
+            var y = m.b * pts[i][0] + m.d * pts[i][1] + m.f;
+            if (x < bx.l) bx.l = x;
+            if (x > bx.r) bx.r = x;
+            if (y < bx.t) bx.t = y;
+            if (y > bx.b) bx.b = y;
+        }
+
+        return bx;
+    }
+
+    // Move a camada (dx, dy) em pixels da comp, convertendo para o espaço do parent.
+    function moveLayerInComp(layer, dx, dy, t) {
+        if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) return;
+
+        var par = null;
+        try { par = layer.parent; } catch (eP) {}
+
+        if (par) {
+            var pm = layerMatrix2D(par, t, 0);
+            var det = pm.a * pm.d - pm.b * pm.c;
+            if (Math.abs(det) > 1e-9) {
+                var lx = (pm.d * dx - pm.c * dy) / det;
+                var ly = (-pm.b * dx + pm.a * dy) / det;
+                dx = lx;
+                dy = ly;
+            }
+        }
+
+        var tg = layer.property("ADBE Transform Group");
+        var pos = tg.property("ADBE Position");
+
+        if (pos.dimensionsSeparated) {
+            offsetScalarProperty(tg.property("ADBE Position_0"), dx);
+            offsetScalarProperty(tg.property("ADBE Position_1"), dy);
+        } else {
+            offsetArrayProperty(pos, [dx, dy, 0]);
+        }
+    }
+
+    function alignableLayers(comp) {
+        var out = [];
+        var sel = comp.selectedLayers;
+
+        for (var i = 0; i < sel.length; i++) {
+            var l = sel[i];
+            if (l instanceof CameraLayer || l instanceof LightLayer) continue;
+            try { if (l.locked) continue; } catch (eL) {}
+            var bx = layerCompBounds(l, comp.time);
+            if (bx) out.push({layer: l, box: bx});
+        }
+
+        return out;
+    }
+
+    /*
+        Alinha as camadas selecionadas.
+        mode: "alignL", "alignHC", "alignR", "alignT", "alignVC", "alignB"
+        toComp: true = na composição; false = na seleção (com 1 camada, usa a comp).
+    */
+    function alignLayers(comp, mode, toComp) {
+        var items = alignableLayers(comp);
+        if (items.length === 0) return 0;
+
+        var T;
+        var i;
+
+        if (toComp || items.length === 1) {
+            T = {l: 0, t: 0, r: comp.width, b: comp.height};
+        } else {
+            T = {l: Infinity, t: Infinity, r: -Infinity, b: -Infinity};
+            for (i = 0; i < items.length; i++) {
+                var bx = items[i].box;
+                T.l = Math.min(T.l, bx.l);
+                T.t = Math.min(T.t, bx.t);
+                T.r = Math.max(T.r, bx.r);
+                T.b = Math.max(T.b, bx.b);
+            }
+        }
+
+        for (i = 0; i < items.length; i++) {
+            var b = items[i].box;
+            var dx = 0;
+            var dy = 0;
+
+            if (mode === "alignL") dx = T.l - b.l;
+            else if (mode === "alignHC") dx = (T.l + T.r) / 2 - (b.l + b.r) / 2;
+            else if (mode === "alignR") dx = T.r - b.r;
+            else if (mode === "alignT") dy = T.t - b.t;
+            else if (mode === "alignVC") dy = (T.t + T.b) / 2 - (b.t + b.b) / 2;
+            else if (mode === "alignB") dy = T.b - b.b;
+
+            moveLayerInComp(items[i].layer, dx, dy, comp.time);
+        }
+
+        return items.length;
+    }
+
+    /*
+        Distribui as camadas selecionadas (3 ou mais): a primeira e a última
+        ficam onde estão e as do meio ficam com o mesmo espaço entre elas.
+        mode: "distT", "distVC", "distB", "distL", "distHC", "distR"
+    */
+    function distributeLayers(comp, mode) {
+        var items = alignableLayers(comp);
+        if (items.length < 3) return -1;
+
+        var vertical = mode === "distT" || mode === "distVC" || mode === "distB";
+
+        function ref(b) {
+            if (mode === "distT") return b.t;
+            if (mode === "distVC") return (b.t + b.b) / 2;
+            if (mode === "distB") return b.b;
+            if (mode === "distL") return b.l;
+            if (mode === "distHC") return (b.l + b.r) / 2;
+            return b.r;
+        }
+
+        items.sort(function (p, q) { return ref(p.box) - ref(q.box); });
+
+        var first = ref(items[0].box);
+        var last = ref(items[items.length - 1].box);
+        var step = (last - first) / (items.length - 1);
+
+        for (var i = 1; i < items.length - 1; i++) {
+            var d = first + step * i - ref(items[i].box);
+            moveLayerInComp(items[i].layer, vertical ? 0 : d, vertical ? d : 0, comp.time);
+        }
+
+        return items.length;
+    }
+
+    function buildAlignTab(tab) {
+        tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 12;
+        tab.spacing = 4;
         tab.margins = [0, 3, 0, 0];
 
-        var left = uiSection(tab, "Anchor Point");
+        var toRow = tab.add("group");
+        toRow.orientation = "row";
+        toRow.alignChildren = ["left", "center"];
+        toRow.spacing = 6;
+
+        uiLabel(toRow, "Alinhar em:");
+        var ddTo = uiFlex(toRow.add("dropdownlist", undefined, ["Seleção", "Composição"]), 60);
+        ddTo.selection = loadSetting("alignTo", "0") === "1" ? 1 : 0;
+        ddTo.helpTip = "Seleção: alinha as camadas entre si. Composição: alinha na comp.";
+        ddTo.onChange = function () {
+            if (ddTo.selection) saveSetting("alignTo", String(ddTo.selection.index));
+        };
+
+        var ALIGN = [
+            ["alignL", "Alinhar à esquerda"], ["alignHC", "Centralizar na horizontal"], ["alignR", "Alinhar à direita"],
+            ["alignT", "Alinhar no topo"], ["alignVC", "Centralizar na vertical"], ["alignB", "Alinhar na base"]
+        ];
+        var DIST = [
+            ["distT", "Distribuir pelo topo"], ["distVC", "Distribuir pelo centro vertical"], ["distB", "Distribuir pela base"],
+            ["distL", "Distribuir pela esquerda"], ["distHC", "Distribuir pelo centro horizontal"], ["distR", "Distribuir pela direita"]
+        ];
+
+        function iconRow(defs, onPick) {
+            var r = tab.add("group");
+            r.orientation = "row";
+            r.alignChildren = ["fill", "center"];
+            r.spacing = 3;
+
+            for (var i = 0; i < defs.length; i++) {
+                var b = uiIconButton(r, {icon: defs[i][0], tip: defs[i][1]});
+                uiFlex(b, 20);
+                b.mesmoMode = defs[i][0];
+                b.onClick = function () { onPick(this.mesmoMode); };
+            }
+
+            return r;
+        }
+
+        function activeComp() {
+            var comp = app.project ? app.project.activeItem : null;
+            if (!isComp(comp)) {
+                alert("Abra uma composição e selecione as camadas.");
+                return null;
+            }
+            if (comp.selectedLayers.length === 0) {
+                alert("Selecione uma ou mais camadas.");
+                return null;
+            }
+            return comp;
+        }
+
+        iconRow(ALIGN, function (mode) {
+            var comp = activeComp();
+            if (!comp) return;
+
+            var toComp = ddTo.selection && ddTo.selection.index === 1;
+            var n = 0;
+
+            app.beginUndoGroup("Mesmo Tools - Alinhar");
+            try {
+                n = alignLayers(comp, mode, toComp);
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text = n
+                ? n + " camada(s) alinhada(s)" + (toComp || n === 1 ? " na composição." : " na seleção.")
+                : "Nenhuma camada para alinhar (câmeras, luzes e bloqueadas ficam de fora).";
+        });
+
+        uiLabel(tab, "Distribuir:");
+
+        iconRow(DIST, function (mode) {
+            var comp = activeComp();
+            if (!comp) return;
+
+            var n = 0;
+
+            app.beginUndoGroup("Mesmo Tools - Distribuir");
+            try {
+                n = distributeLayers(comp, mode);
+            } finally {
+                app.endUndoGroup();
+            }
+
+            if (n < 0) {
+                alert("Selecione 3 ou mais camadas para distribuir.");
+                return;
+            }
+
+            status.text = n + " camada(s) distribuída(s).";
+        });
+
+        var status = addStatus(tab, "Selecione as camadas e clique num botão.");
+    }
+
+    // Anchor Point e Extract juntos, lado a lado; Align embaixo.
+    function buildAnchorExtractTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 6;
+        tab.margins = [0, 3, 0, 0];
+
+        var top = tab.add("group");
+        top.orientation = "row";
+        top.alignChildren = ["fill", "top"];
+        top.spacing = 12;
+        top.margins = 0;
+
+        var left = uiSection(top, "Anchor Point");
         left.parent.alignment = ["left", "top"];
-        var right = uiSection(tab, "Extract");
+        var right = uiSection(top, "Extract");
         right.parent.preferredSize.width = 60;
 
         buildAnchorTab(left);
         buildExtractTab(right);
+
+        buildAlignTab(uiSection(tab, "Align"));
     }
 
     function buildBeatsTab(tab) {
@@ -6350,7 +6960,7 @@
                 label: "Camadas", abbr: "Lyr", tip: "Criar camadas, null no atributo, anchor point, extract e batidas",
                 tools: [
                     {label: "Criar", build: buildCreateTab, width: 260},
-                    {label: "Anchor · Extract", build: buildAnchorExtractTab, width: 300},
+                    {label: "Anchor · Extract · Align", build: buildAnchorExtractTab, width: 300},
                     {label: "Batidas", build: buildBeatsTab, width: 260}
                 ]
             },
