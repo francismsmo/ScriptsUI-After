@@ -1,7 +1,15 @@
 # Mesmo Tools — histórico de versões
 
-A versão aparece no canto do cabeçalho do painel (ex.: `v2.14`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
+A versão aparece no canto do cabeçalho do painel (ex.: `v2.15`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
 A versão em inglês (`MesmoTools_EN.jsx`) tem sempre o mesmo número da portuguesa.
+
+## v2.15 — 28/10/2026
+- **Volta a aba Expressões**, em versão compacta:
+  - dropdown de categoria + dropdown de expressão (no lugar da lista grande);
+  - uma linha com "Aplicar em" e "Precisa de" (a descrição completa aparece ao passar o mouse);
+  - campo de código menor;
+  - Nova, Capturar, Salvar e Excluir em ícones; "Criar controles" e APLICAR na mesma linha.
+- Os 18 atalhos com tutorial e as suas favoritas (★ Minhas) voltam como estavam.
 
 ## v2.14 — 28/10/2026
 - **Interface mais compacta:** botões, dropdowns, campos e checkboxes mais baixos e com menos espaço entre eles; cabeçalho e abas mais justos.
@@ -9,7 +17,7 @@ A versão em inglês (`MesmoTools_EN.jsx`) tem sempre o mesmo número da portugu
 - **Explode:** "Dividir" e "Opções" lado a lado.
 - **Camadas:** Anchor Point e Extract juntos num bloco só, lado a lado. Criar virou uma linha de ícones (Texto, Adjustment, Null, Sólido, Shape, Câmera, Luz; o nome aparece ao passar o mouse). Batidas mais compacta.
 - **3D / Blur:** opções numa linha só e botões de ícone Ligar/Desligar para 3D e Motion Blur.
-- **Saiu:** a aba Expressões e o botão "Ler 1ª Comp". As 18 expressões comentadas continuam no histórico do git (até a v2.13).
+- **Saiu:** o botão "Ler 1ª Comp" (e a aba Expressões, que voltou compacta na v2.15).
 
 ## v2.13 — 26/10/2026
 - **Curvas > Clássico:** easy ease do After com influência ajustável, por keyframe (velocidade 0, como o F9).

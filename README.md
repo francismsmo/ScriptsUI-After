@@ -2,15 +2,16 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-**Versão atual: v2.14** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
+**Versão atual: v2.15** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
 
 > **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface in English. Install it the same way. See [English version](#english-version) below.
 
-O painel tem 3 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
+O painel tem 4 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
 
 - **Animação** = Curvas + Explode
 - **Camadas** = Criar + Anchor Point · Extract + Batidas
 - **Comps** = Ajustes + Duplicar + 3D / Blur
+- **Expressões** (compacta)
 
 Com o painel largo, as ferramentas ficam lado a lado em colunas; estreito, ficam empilhadas. O botão **⇆** ao lado das abas troca entre *Auto*, *Lado a lado* e *Empilhado*. Clicar no cabeçalho de uma ferramenta recolhe ou expande ela, e o painel lembra o que ficou recolhido.
 
@@ -28,6 +29,7 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 | **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
+| **Expressões** | 18 atalhos prontos (delay, wiggle, texto, contadores, caixa reativa, 3D…) e as suas favoritas (★ Minhas), num dropdown por categoria. Cada atalho traz o tutorial em comentário no topo do código; "Aplicar em" e "Precisa de" aparecem logo abaixo do dropdown. Ícones para nova, capturar, salvar e excluir; cria o Slider Control quando a expressão precisa. |
 | **3D / Blur** | Botões de ícone Ligar/Desligar para o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
 
 ## Instalação
@@ -37,7 +39,7 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
    - **macOS:** `/Applications/Adobe After Effects <versão>/Scripts/ScriptUI Panels/`
 2. Se você tinha o `CompManager_Mesmo.jsx` instalado, apague ele da pasta (ele foi substituído).
 3. Reinicie o After Effects e abra pelo menu **Window → MesmoTools.jsx**.
-4. Para salvar curvas, ative **Preferências → Scripting & Expressions → Allow Scripts to Write Files and Access Network**.
+4. Para salvar curvas e expressões, ative **Preferências → Scripting & Expressions → Allow Scripts to Write Files and Access Network**.
 
 ## Curvas de velocidade
 
@@ -107,5 +109,5 @@ python3 tools/build_en.py          # rebuilds MesmoTools_EN.jsx
 ```
 
 - Always edit `MesmoTools.jsx`, then run `tools/build_en.py`. The UI translations live in the `TR` table inside that script; it fails and lists any Portuguese text left untranslated.
-- Both versions share the same saved curves and settings.
+- Both versions share the same saved curves, favorite expressions and settings.
 - Code comments inside the file stay in Portuguese; everything shown in After Effects is in English.

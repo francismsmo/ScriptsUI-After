@@ -11,16 +11,18 @@
     - Animation = Curves + Explode (on the same screen)
     - Layers = Create + Anchor Point + Extract + Beats
     - Comps = Settings + Duplicate + 3D / Blur (on the same screen)
+    - Expressions: ready-made shortcuts + your favorite expressions
 
     Files saved in Folder.userData/MesmoTools/ (shared with the
     Portuguese version):
     - speed_curves.txt          (curves)
+    - expression_favorites.txt  (expressions)
 */
 
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.14";
+    var SCRIPT_VERSION = "2.15";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -437,6 +439,24 @@
                 g.rectPath(x + cells[i][0] * s, y + cells[i][1] * s, s * 0.42, s * 0.42);
                 g.fillPath(uiBrush(g, c));
             }
+        },
+        plus: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + s / 2 - 1, y + 1, 2, s - 2);
+            g.rectPath(x + 1, y + s / 2 - 1, s - 2, 2);
+            g.fillPath(uiBrush(g, c));
+        },
+        // capturar: mira
+        capture: function (g, x, y, s, c) {
+            g.newPath();
+            g.ellipsePath(x + s * 0.18, y + s * 0.18, s * 0.64, s * 0.64);
+            g.strokePath(uiPen(g, c, 1.5));
+            g.newPath();
+            g.rectPath(x + s / 2 - 0.75, y, 1.5, s * 0.3);
+            g.rectPath(x + s / 2 - 0.75, y + s * 0.7, 1.5, s * 0.3);
+            g.rectPath(x, y + s / 2 - 0.75, s * 0.3, 1.5);
+            g.rectPath(x + s * 0.7, y + s / 2 - 0.75, s * 0.3, 1.5);
+            g.fillPath(uiBrush(g, c));
         },
         beats: function (g, x, y, s, c) {
             var hs = [0.35, 0.8, 0.5, 1, 0.4];
@@ -2651,6 +2671,1316 @@
         disable3DButton.onClick = function () { processSelection(MODES.threeD, false); };
         mbOnButton.onClick = function () { processSelection(MODES.motionBlur, true); };
         mbOffButton.onClick = function () { processSelection(MODES.motionBlur, false); };
+    }
+
+    function getExpressionStoreFile() {
+        var dir = new Folder(Folder.userData.fsName + "/MesmoTools");
+
+        if (!dir.exists) {
+            try {
+                dir.create();
+            } catch (e) {}
+        }
+
+        return new File(dir.fsName + "/expression_favorites.txt");
+    }
+
+    function loadExpressionFavorites() {
+        var out = [];
+        var f = getExpressionStoreFile();
+
+        if (!f.exists) return out;
+
+        try {
+            f.encoding = "UTF-8";
+
+            if (!f.open("r")) return out;
+
+            while (!f.eof) {
+                var line = f.readln();
+
+                if (line === "") continue;
+
+                var tabIndex = line.indexOf("\t");
+                if (tabIndex === -1) continue;
+
+                var nameEnc = line.substring(0, tabIndex);
+                var codeEnc = line.substring(tabIndex + 1);
+
+                try {
+                    out.push({
+                        name: decodeURIComponent(nameEnc),
+                        code: decodeURIComponent(codeEnc)
+                    });
+                } catch (decodeErr) {}
+            }
+
+            f.close();
+        } catch (e) {
+            try { f.close(); } catch (closeErr) {}
+        }
+
+        return out;
+    }
+
+    function saveExpressionFavorites(favorites) {
+        var f = getExpressionStoreFile();
+
+        try {
+            f.encoding = "UTF-8";
+
+            if (!f.open("w")) {
+                throw new Error("Could not open the favorites file.");
+            }
+
+            for (var i = 0; i < favorites.length; i++) {
+                f.writeln(
+                    encodeURIComponent(favorites[i].name) +
+                    "\t" +
+                    encodeURIComponent(favorites[i].code)
+                );
+            }
+
+            f.close();
+            return true;
+
+        } catch (e) {
+            try { f.close(); } catch (closeErr) {}
+            alert(
+                "Could not save favorites:\n" +
+                e.toString().replace("Error: ", "") + WRITE_HELP
+            );
+            return false;
+        }
+    }
+
+    function findFavoriteIndex(favorites, name) {
+        for (var i = 0; i < favorites.length; i++) {
+            if (favorites[i].name === name) return i;
+        }
+
+        return -1;
+    }
+
+    function collectSelectedExpressionProperties() {
+        var out = [];
+        var comp = app.project ? app.project.activeItem : null;
+
+        if (!isComp(comp)) return out;
+
+        function addProp(p) {
+            if (!p) return;
+
+            var canSet = false;
+
+            try {
+                canSet = p.canSetExpression === true;
+            } catch (e0) {}
+
+            if (!canSet) return;
+
+            for (var k = 0; k < out.length; k++) {
+                if (out[k] === p) return;
+            }
+
+            out.push(p);
+        }
+
+        try {
+            var compProps = comp.selectedProperties;
+
+            if (compProps && compProps.length) {
+                for (var i = 0; i < compProps.length; i++) {
+                    addProp(compProps[i]);
+                }
+            }
+        } catch (e1) {}
+
+        try {
+            var layers = comp.selectedLayers;
+
+            for (var j = 0; j < layers.length; j++) {
+                var props = layers[j].selectedProperties;
+
+                if (!props) continue;
+
+                for (var p = 0; p < props.length; p++) {
+                    addProp(props[p]);
+                }
+            }
+        } catch (e2) {}
+
+        return out;
+    }
+
+    // ================================================================
+    // MESMO EXPRESSION LIBRARY (English)
+    // Built from github.com/francismsmo/After-effects-Expressions.
+    // Each shortcut has a description, where to apply it and a tutorial comment.
+    // ================================================================
+
+    var EXPRESSION_LIBRARY = [
+        {
+            name: "Control Delay — Position",
+            cat: "Delay",
+            target: "Position",
+            desc: "The layer follows its parent's Position a few frames late. Use different delay values on each layer for a cascade effect.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   CONTROL DELAY — POSITION",
+                "   Apply to: Position of the layer that will follow the Control",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   The layer repeats the motion of its parent layer, just a few",
+                "   frames late. Gives that \"drag\" / follow-through cascade.",
+                "",
+                "   How to use:",
+                "   1. Create a control layer (e.g. a Null named \"Control\") and",
+                "      animate its Position.",
+                "   2. Parent the layers that will follow to the Control",
+                "      (Parent & Link pick whip).",
+                "   3. Paste this expression on the Position of each child layer.",
+                "   4. Adjust delayFrames below. Use different values on each",
+                "      layer (3, 6, 9...) for the cascade effect.",
+                "",
+                "   Notes:",
+                "   - Without a parent, the layer stays at its own value.",
+                "   - Works best with the Control unrotated and at 100% scale,",
+                "     because the delay is added in the parent's space.",
+                "   ============================================================ */",
+                "",
+                "var delayFrames = 3; // How many frames of delay you want",
+                "var delayTime = framesToTime(delayFrames);",
+                "",
+                "// The target (your Control object)",
+                "var target = parent;",
+                "",
+                "if (target != null) {",
+                "    // Where the Control was 'X' frames ago",
+                "    var delayedPos = target.transform.position.valueAtTime(time - delayTime);",
+                "",
+                "    // Where the Control is NOW",
+                "    var currentPos = target.transform.position.valueAtTime(time);",
+                "",
+                "    // Motion difference (delta)",
+                "    var delta = delayedPos - currentPos;",
+                "",
+                "    // Add the motion to the layer's own value (keeps the layout)",
+                "    value + delta;",
+                "} else {",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Control Delay — Rotation",
+            cat: "Delay",
+            target: "Rotation",
+            desc: "The layer repeats its parent's rotation a few frames late.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   CONTROL DELAY — ROTATION",
+                "   Apply to: Rotation of the layer that will follow the Control",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   The layer repeats the rotation of its parent layer, just a few",
+                "   frames late. Gives that \"drag\" / follow-through cascade.",
+                "",
+                "   How to use:",
+                "   1. Create a control layer (e.g. a Null named \"Control\") and",
+                "      animate its Rotation.",
+                "   2. Parent the layers that will follow to the Control",
+                "      (Parent & Link pick whip).",
+                "   3. Paste this expression on the Rotation of each child layer.",
+                "   4. Adjust delayFrames below. Use different values on each",
+                "      layer (3, 6, 9...) for the cascade effect.",
+                "",
+                "   Notes:",
+                "   - Without a parent, the layer stays at its own value.",
+                "   - On 3D layers, apply it to Z Rotation.",
+                "   ============================================================ */",
+                "",
+                "var delayFrames = 3; // How many frames of delay",
+                "var delayTime = framesToTime(delayFrames);",
+                "var target = parent;",
+                "",
+                "if (target != null) {",
+                "    // Parent's rotation difference",
+                "    var rotaPaiAtrasada = target.transform.rotation.valueAtTime(time - delayTime);",
+                "    var rotaPaiAgora = target.transform.rotation.valueAtTime(time);",
+                "    var delta = rotaPaiAtrasada - rotaPaiAgora;",
+                "",
+                "    // Layer's own rotation + the parent's delay",
+                "    value + delta;",
+                "} else {",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Control Delay — Scale",
+            cat: "Delay",
+            target: "Scale",
+            desc: "The layer repeats its parent's scale a few frames late. Great for cascading pops.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   CONTROL DELAY — SCALE",
+                "   Apply to: Scale of the layer that will follow the Control",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   The layer repeats the scale of its parent layer, just a few",
+                "   frames late. Gives that \"drag\" / follow-through cascade.",
+                "",
+                "   How to use:",
+                "   1. Create a control layer (e.g. a Null named \"Control\") and",
+                "      animate its Scale.",
+                "   2. Parent the layers that will follow to the Control",
+                "      (Parent & Link pick whip).",
+                "   3. Paste this expression on the Scale of each child layer.",
+                "   4. Adjust delayFrames below. Use different values on each",
+                "      layer (3, 6, 9...) for the cascade effect.",
+                "",
+                "   Notes:",
+                "   - Without a parent, the layer stays at its own value.",
+                "   - Works best with uniform scale on the Control (X = Y)",
+                "     and fast animations, like pops.",
+                "   ============================================================ */",
+                "",
+                "var delayFrames = 3; // How many frames of delay",
+                "var delayTime = framesToTime(delayFrames);",
+                "var target = parent;",
+                "",
+                "if (target != null) {",
+                "    // Parent's scale difference",
+                "    var escalaPaiAtrasada = target.transform.scale.valueAtTime(time - delayTime);",
+                "    var escalaPaiAgora = target.transform.scale.valueAtTime(time);",
+                "    var delta = escalaPaiAtrasada - escalaPaiAgora;",
+                "",
+                "    // Layer's own scale + the parent's delay",
+                "    value + delta;",
+                "} else {",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Growing wiggle",
+            cat: "Wiggle",
+            target: "Scale",
+            desc: "Wiggle that starts still and gets stronger over time, with no limit. Keeps the scale proportional.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   GROWING WIGGLE (no limit)",
+                "   Apply to: Scale",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Wiggle intensity starts at 0 and grows by growthRate every",
+                "   second. It uses the same value for X and Y, so the layer",
+                "   pulses without stretching.",
+                "",
+                "   How to use:",
+                "   1. Paste it on the layer's Scale.",
+                "   2. growthRate = how much the intensity grows per second.",
+                "   3. The 0.5 inside wiggle is the frequency (wiggles per second).",
+                "",
+                "   Notes:",
+                "   - Counts from the start of the comp (time = 0). If the layer",
+                "     starts later, replace time with (time - inPoint).",
+                "   - Want a ceiling? Use the \"Growing wiggle with limit\" shortcut.",
+                "   ============================================================ */",
+                "",
+                "// Rate defines how much the wiggle intensity increases per second",
+                "var growthRate = 10;",
+                "var dynamicAmount = time * growthRate;",
+                "",
+                "// Wiggle(frequency, amplitude)",
+                "var w = wiggle(0.5, dynamicAmount);",
+                "",
+                "// Same value for X and Y = keeps proportions",
+                "[w[0], w[0]]"
+            ].join("\n")
+        },
+        {
+            name: "Growing wiggle with limit",
+            cat: "Wiggle",
+            target: "Scale",
+            desc: "Like the growing wiggle, but it stops growing when it reaches the limit.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   GROWING WIGGLE WITH LIMIT",
+                "   Apply to: Scale",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Wiggle intensity grows by growthRate per second until it",
+                "   reaches limit, then stays constant. Keeps the scale",
+                "   proportional.",
+                "",
+                "   How to use:",
+                "   1. Paste it on the layer's Scale.",
+                "   2. growthRate = how much it grows per second.",
+                "   3. limit = maximum intensity.",
+                "      E.g. growthRate 10 and limit 30 -> reaches the max in 3 s.",
+                "",
+                "   Note: counts from the start of the comp. If the layer starts",
+                "   later, replace time with (time - inPoint).",
+                "   ============================================================ */",
+                "",
+                "var growthRate = 10; // Increases by 10 every second",
+                "var limit = 30;      // Maximum intensity",
+                "",
+                "// This will grow until it hits 30, then stay there",
+                "var dynamicAmount = Math.min(time * growthRate, limit);",
+                "",
+                "var w = wiggle(0.5, dynamicAmount);",
+                "",
+                "// Same value for X and Y = keeps proportions",
+                "[w[0], w[0]]"
+            ].join("\n")
+        },
+        {
+            name: "Fading wiggle",
+            cat: "Wiggle",
+            target: "Rotation",
+            desc: "Wiggle that starts strong and calms down until it stops. Good for something that sways and settles.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   FADING (DAMPED) WIGGLE",
+                "   Apply to: Rotation (works on any property)",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Starts at startAmount intensity and loses decayRate per",
+                "   second until it reaches 0, when the layer stops shaking.",
+                "",
+                "   How to use:",
+                "   1. Paste it on the layer's Rotation.",
+                "   2. startAmount = starting intensity (degrees, on Rotation).",
+                "   3. decayRate = how much it loses per second.",
+                "      E.g. 30 and 10 -> fully stops in 3 s.",
+                "",
+                "   Notes:",
+                "   - Also works on Position and Scale; wiggle returns the full",
+                "     property value.",
+                "   - Counts from the start of the comp. If the layer starts",
+                "     later, replace time with (time - inPoint).",
+                "   ============================================================ */",
+                "",
+                "var startAmount = 30; // Starting intensity",
+                "var decayRate = 10;   // How much it decreases per second",
+                "",
+                "// Never negative: stops at 0",
+                "var dynamicAmount = Math.max(startAmount - (time * decayRate), 0);",
+                "",
+                "// On Rotation, wiggle already returns the final value",
+                "wiggle(0.5, dynamicAmount);"
+            ].join("\n")
+        },
+        {
+            name: "Looping wiggle",
+            cat: "Wiggle",
+            target: "Any property",
+            desc: "Wiggle that repeats seamlessly every X seconds, with no jump at the loop point. Ideal for looping videos and GIFs.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   SEAMLESS LOOPING WIGGLE",
+                "   Apply to: any property (Position, Rotation, Scale...)",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Blends two identical wiggles offset by loopTime. The end of",
+                "   the cycle matches the start exactly, so it repeats with no",
+                "   \"jump\".",
+                "",
+                "   How to use:",
+                "   1. Paste it on the property.",
+                "   2. freq = how many times per second it moves.",
+                "   3. amp = size of the motion (px, degrees or %).",
+                "   4. loopTime = loop length in seconds. Use the comp duration",
+                "      (or a fraction of it) so the loop closes perfectly.",
+                "   ============================================================ */",
+                "",
+                "// --- SETTINGS ---",
+                "freq = 2;       // Frequency (how many times it moves per second)",
+                "amp = 50;       // Amplitude (distance/size of the variation)",
+                "loopTime = 10;  // Loop length in seconds",
+                "",
+                "// --- LOOP CALCULATION ---",
+                "t = time % loopTime;",
+                "w1 = wiggle(freq, amp, 1, 0.5, t);",
+                "w2 = wiggle(freq, amp, 1, 0.5, t - loopTime);",
+                "",
+                "// Blend between the first and second wiggle",
+                "linear(t, 0, loopTime, w1, w2);"
+            ].join("\n")
+        },
+        {
+            name: "Proportional scale wiggle",
+            cat: "Wiggle",
+            target: "Scale",
+            desc: "Wiggle on Scale without stretching: width and height change together.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   SCALE WIGGLE THAT KEEPS PROPORTIONS",
+                "   Apply to: Scale",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   A regular wiggle on Scale picks X and Y separately and the",
+                "   layer \"stretches\". Here X is used for both axes, so it only",
+                "   grows and shrinks evenly.",
+                "",
+                "   How to use:",
+                "   1. Paste it on Scale.",
+                "   2. wiggle(5, 30): 5 = frequency (times per second),",
+                "      30 = intensity (in %).",
+                "   ============================================================ */",
+                "",
+                "//This Wiggle on Scale keep the aspect ratio the same.",
+                "w = wiggle(5, 30);",
+                "",
+                "// Same value for X and Y",
+                "[w[0], w[0]]"
+            ].join("\n")
+        },
+        {
+            name: "Reveal text letter by letter",
+            cat: "Text",
+            target: "Range Selector > Start",
+            desc: "Reveals the text one letter per frame, typewriter style. The duration adapts to the text length.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   REVEAL TEXT LETTER BY LETTER",
+                "   Apply to: Start of the Range Selector of an Opacity animator",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Animates Start from 0 to 100 over as many frames as the text",
+                "   has letters: 1 letter per frame. If the text changes, the",
+                "   duration follows.",
+                "",
+                "   How to use:",
+                "   1. On the text layer: Animate > Opacity.",
+                "   2. In the new animator, set Opacity = 0%.",
+                "   3. Open Range Selector 1 and paste this expression on Start.",
+                "   4. The text appears from left to right.",
+                "",
+                "   Tips:",
+                "   - Slower: replace framesToTime(numChars) with",
+                "     framesToTime(numChars * 2) (2 frames per letter).",
+                "   - Starts at the beginning of the comp. To start when the",
+                "     layer comes in, replace time with (time - inPoint).",
+                "   ============================================================ */",
+                "",
+                "//Add an Opacity 0% animator and put this code on Start",
+                "",
+                "var numChars = text.sourceText.length;  // how many letters the text has",
+                "var finalTime = framesToTime(numChars); // 1 frame per letter",
+                "linear(time, 0, finalTime, 0, 100);"
+            ].join("\n")
+        },
+        {
+            name: "Chain APOIO text after PRINCIPAL",
+            cat: "Text",
+            target: "Range Selector > Start (APOIO layer)",
+            desc: "Makes the APOIO layer's animation start on its own as soon as the PRINCIPAL layer finishes animating (Start reaches 100).",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   CHAINED TEXT: APOIO STARTS WHEN PRINCIPAL FINISHES",
+                "   Apply to: Start of the Range Selector of the APOIO layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Watches the Start of the PRINCIPAL layer's Range Selector.",
+                "   When it reaches 100 (animation done), APOIO's Start goes from",
+                "   0 to 100 in 15 frames. If you change PRINCIPAL's timing,",
+                "   APOIO follows on its own.",
+                "",
+                "   How to use:",
+                "   1. Have two text layers named PRINCIPAL and APOIO, each with",
+                "      \"Animator 1\" > \"Range Selector 1\".",
+                "   2. Animate (or use an expression on) PRINCIPAL's Start up to 100.",
+                "   3. Paste this expression on Start of APOIO's Range Selector.",
+                "   4. Adjust the duration in framesToTime(15).",
+                "",
+                "   Notes:",
+                "   - The layer, animator and selector names must match exactly.",
+                "     If you rename them, change them here too.",
+                "   - The expression searches backwards frame by frame; in very",
+                "     long comps it may slow the preview down a bit.",
+                "   ============================================================ */",
+                "",
+                "// Apply to the Start of the APOIO layer's Range Selector",
+                "// The animation starts when the PRINCIPAL layer's Start reaches 100.",
+                "",
+                "var anterior = thisComp",
+                "    .layer(\"PRINCIPAL\")",
+                "    .text",
+                "    .animator(\"Animator 1\")",
+                "    .selector(\"Range Selector 1\")",
+                "    .start;",
+                "",
+                "var duracao = framesToTime(15); // APOIO animation length",
+                "",
+                "if (anterior < 100){",
+                "    0; // PRINCIPAL still animating: APOIO waits",
+                "}else{",
+                "    var inicio = time;",
+                "",
+                "    // Go back in time until the frame where PRINCIPAL reached 100",
+                "    for (var t = time; t >= 0; t -= thisComp.frameDuration){",
+                "        var v = thisComp",
+                "            .layer(\"PRINCIPAL\")",
+                "            .text",
+                "            .animator(\"Animator 1\")",
+                "            .selector(\"Range Selector 1\")",
+                "            .start",
+                "            .valueAtTime(t);",
+                "",
+                "        if (v < 100){",
+                "            inicio = t + thisComp.frameDuration;",
+                "            break;",
+                "        }",
+                "    }",
+                "",
+                "    // From there, animate from 0 to 100",
+                "    linear(time, inicio, inicio + duracao, 0, 100);",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "2-digit counter (00–99)",
+            cat: "Numbers",
+            target: "Source Text",
+            desc: "Shows a Slider's value as a whole number with a leading zero (00, 01... 10). For counters and scoreboards.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   2-DIGIT COUNTER (00, 01, 02... 10, 11...)",
+                "   Apply to: Source Text of a text layer",
+                "   Needs: a \"Slider Control\" effect on the same layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Rounds the Slider value and adds a zero in front of numbers",
+                "   below 10.",
+                "",
+                "   How to use:",
+                "   1. On the text layer, add Effect > Expression Controls",
+                "      > Slider Control (the panel creates it if missing).",
+                "   2. Paste this expression on Source Text.",
+                "   3. Animate the Slider (e.g. from 0 to 10) and the text counts.",
+                "   ============================================================ */",
+                "",
+                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
+                "",
+                "// Below 10 gets a zero in front",
+                "if (s < 10) { \"0\" + s } else { s.toString() }"
+            ].join("\n")
+        },
+        {
+            name: "6-digit counter (000.000)",
+            cat: "Numbers",
+            target: "Source Text",
+            desc: "Shows a Slider's value with 6 digits and a thousands dot (000.000). For view counters, amounts, etc.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   6-DIGIT COUNTER (000.000)",
+                "   Apply to: Source Text of a text layer",
+                "   Needs: a \"Slider Control\" effect on the same layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Rounds the Slider, pads it with zeros to 6 digits and puts a",
+                "   dot in the middle. E.g. 1234 -> \"001.234\".",
+                "",
+                "   How to use:",
+                "   1. Add a Slider Control to the text layer (the panel creates",
+                "      it if missing).",
+                "   2. Paste this expression on Source Text.",
+                "   3. Animate the Slider from 0 to the final value (max 999999).",
+                "",
+                "   Note: negative numbers and values above 999.999 don't fit",
+                "   the format.",
+                "   ============================================================ */",
+                "",
+                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
+                "",
+                "// Pad with zeros on the left and keep the last 6 digits",
+                "txt = (\"000000\" + s).slice(-6);",
+                "",
+                "// Dot separating the thousands",
+                "txt.slice(0, 3) + \".\" + txt.slice(3);"
+            ].join("\n")
+        },
+        {
+            name: "Camera timecode (00:00:SS:FF)",
+            cat: "Numbers",
+            target: "Source Text",
+            desc: "Fakes a camera timecode from a Slider that counts frames (30 fps): shows 00:00:seconds:frames.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   CAMERA TIMECODE (00:00:SS:FF at 30 fps)",
+                "   Apply to: Source Text of a text layer",
+                "   Needs: a \"Slider Control\" effect on the same layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   The Slider is a FRAME counter. The expression divides by 30",
+                "   and shows seconds and frames in camera timecode format:",
+                "   fixed \"00:00:\" + SS:FF.",
+                "   (In the code, \"minutos\" holds the seconds and \"segundos\"",
+                "   holds the frames.)",
+                "",
+                "   How to use:",
+                "   1. Add a Slider Control to the text layer (the panel creates",
+                "      it if missing).",
+                "   2. Paste this expression on Source Text.",
+                "   3. Animate the Slider. E.g. 0 -> 300 over 10 s makes the",
+                "      timecode run in real time at 30 fps.",
+                "      Shortcut: on the Slider, use the expression  time * 30",
+                "",
+                "   Tip: for another fps, replace both 30s with the fps you want.",
+                "   ============================================================ */",
+                "",
+                "v = Math.floor(effect(\"Slider Control\")(\"Slider\")); // total frames",
+                "",
+                "minutos = Math.floor(v / 30); // seconds (30 frames = 1 s)",
+                "segundos = v % 30;            // leftover frames",
+                "",
+                "minTxt = (minutos < 10) ? (\"0\" + minutos) : minutos.toString();",
+                "segTxt = (segundos < 10) ? (\"0\" + segundos) : segundos.toString();",
+                "",
+                "// fixed text + timecode",
+                "\"00:00:\" + minTxt + \":\" + segTxt;"
+            ].join("\n")
+        },
+        {
+            name: "Reactive box — text Anchor Point",
+            cat: "Layout",
+            target: "Anchor Point (text layer)",
+            desc: "Reactive box part 1: centers the text's Anchor Point, so text and box line up by the center.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   REACTIVE BOX — PART 1: TEXT ANCHOR POINT",
+                "   Apply to: Anchor Point of the TEXT layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Puts the Anchor Point exactly at the center of the text,",
+                "   whatever its size. The text grows to both sides and stays",
+                "   aligned with the box.",
+                "",
+                "   How to use (together with Part 2):",
+                "   1. Replace \"nome da camada\" with your text layer's name",
+                "      (it can be the layer itself: thisLayer also works).",
+                "   2. Paste it on the text's Anchor Point.",
+                "   3. On the box (shape), use the \"Reactive box — box Size\"",
+                "      shortcut.",
+                "   4. Align text and box at the same position (or parent them).",
+                "   ============================================================ */",
+                "",
+                "///Text layer - Anchor Point:",
+                "",
+                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
+                "",
+                "Height = a.height;",
+                "Width = a.width;",
+                "Left = a.left;",
+                "Top = a.top;",
+                "",
+                "// Center of the text rectangle",
+                "x = Left + Width / 2;",
+                "y = Top + Height / 2;",
+                "",
+                "[x, y]"
+            ].join("\n")
+        },
+        {
+            name: "Reactive box — box Size",
+            cat: "Layout",
+            target: "Rectangle Path > Size (box shape)",
+            desc: "Reactive box part 2: the box (shape) resizes on its own to fit the text, with padding controlled by a Slider.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   REACTIVE BOX — PART 2: BOX SIZE",
+                "   Apply to: Size of the Rectangle Path on the SHAPE (box) layer",
+                "   Needs: a \"Slider Control\" effect on the box layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Reads the text size and makes the rectangle that size plus",
+                "   padding (the Slider value). Change the text, the box follows.",
+                "",
+                "   How to use:",
+                "   1. Create a rectangle (shape layer > Rectangle).",
+                "   2. Add a Slider Control to the box layer (the panel creates",
+                "      it if missing). It is the padding in px.",
+                "   3. Replace \"nome da camada\" with the text layer's name.",
+                "   4. Paste it on the Rectangle Path's Size.",
+                "   5. Use Part 1 on the text's Anchor Point to center it.",
+                "",
+                "   Tip: the padding is added to the total; with Slider 40 you get",
+                "   20 px on each side.",
+                "   ============================================================ */",
+                "",
+                "///Box layer - Size within the parameters:",
+                "",
+                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
+                "",
+                "Height = a.height;",
+                "Width = a.width;",
+                "",
+                "p = effect(\"Slider Control\")(\"Slider\"); // padding",
+                "x = Width + p;",
+                "y = Height + p;",
+                "",
+                "[x, y]"
+            ].join("\n")
+        },
+        {
+            name: "Size from sliders (Width/Height)",
+            cat: "Layout",
+            target: "Rectangle Path > Size",
+            desc: "Controls a rectangle's size with two sliders on a CONTROLES layer. Good for keeping several controls in one place.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   SIZE FROM SLIDERS",
+                "   Apply to: Size of the Rectangle Path (or any [x, y] value)",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Takes width and height from two Sliders on a control layer.",
+                "   Several boxes can use the same sliders and change together.",
+                "",
+                "   How to use:",
+                "   1. Create a Null named CONTROLES.",
+                "   2. Add two Slider Controls to it and rename them",
+                "      \"Largura\" (width) and \"Altura\" (height).",
+                "   3. Paste this expression on the box's Rectangle Path Size.",
+                "   4. Move the sliders on CONTROLES.",
+                "   ============================================================ */",
+                "",
+                "w = thisComp.layer(\"CONTROLES\").effect(\"Largura\")(\"Slider\");",
+                "h = thisComp.layer(\"CONTROLES\").effect(\"Altura\")(\"Slider\");",
+                "",
+                "[w, h]"
+            ].join("\n")
+        },
+        {
+            name: "Constant size to camera (Scale x Z)",
+            cat: "3D",
+            target: "Scale (3D layer)",
+            desc: "Keeps the layer's apparent size the same even when it moves closer to or farther from the camera.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   CONSTANT SIZE TO CAMERA (Scale x Position Z)",
+                "   Apply to: Scale of a 3D layer",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Measures the distance between the layer and the active",
+                "   camera and corrects the scale by the same ratio. Result: the",
+                "   layer always looks the same size on screen, even when Z",
+                "   changes or the camera moves. Great for text, icons and",
+                "   markers that follow a 3D scene.",
+                "",
+                "   How to use:",
+                "   1. Turn on the layer's 3D and have a camera in the comp.",
+                "   2. Paste this expression on Scale.",
+                "   3. Scale is 100% when the layer is at the camera's Zoom",
+                "      distance.",
+                "",
+                "   Notes:",
+                "   - With no camera in the comp, the original scale is kept.",
+                "   - Use it on layers without a parent (it uses the local",
+                "     position).",
+                "   ============================================================ */",
+                "",
+                "try {",
+                "    // Get the comp's active camera",
+                "    cam = thisComp.activeCamera;",
+                "",
+                "    // Distance from the camera to the layer's Anchor Point",
+                "    distance = length(sub(position, cam.position));",
+                "",
+                "    // Camera focal distance (where scale is 100%)",
+                "    zoom = cam.zoom;",
+                "",
+                "    // Inverse scale factor",
+                "    scaleFactor = (distance / zoom) * 100;",
+                "",
+                "    // Apply the factor on X, Y and Z",
+                "    [scaleFactor, scaleFactor, scaleFactor];",
+                "} catch(err) {",
+                "    // No camera in the scene: keep the original scale to avoid errors",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Decelerate to a stop",
+            cat: "Motion",
+            target: "Rotation (or any 1D value)",
+            desc: "Motion that starts fast and brakes until it stops, like a spinning wheel. Uniformly decelerated motion physics.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   DECELERATE TO A STOP",
+                "   Apply to: Rotation (or any 1-value property: opacity,",
+                "             separated X Position, Slider...)",
+                "   ------------------------------------------------------------",
+                "   What it does:",
+                "   Simulates something that starts at speed vInicial and brakes",
+                "   (desaceleracao per second) until it stops, then stays still.",
+                "   E.g. a prize wheel spinning and stopping.",
+                "",
+                "   How to use:",
+                "   1. Paste it on the layer's Rotation.",
+                "   2. vInicial = starting speed (degrees per second).",
+                "   3. desaceleracao = how much the speed drops per second.",
+                "      E.g. 150 and 20 -> stops at 7.5 s, after turning 562.5°.",
+                "",
+                "   Notes:",
+                "   - The value replaces the property's. To add it to the",
+                "     rotation you already have, change the last line to",
+                "     value + (vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);",
+                "   - On Position (2D), separate dimensions and use it on X or Y.",
+                "   ============================================================ */",
+                "",
+                "var vInicial = 150;     // Starting speed",
+                "var desaceleracao = 20; // How much it decreases per second",
+                "var tOriginal = Math.max(0, time); // Makes sure time is never negative",
+                "",
+                "// 1. How long until the speed reaches zero",
+                "var tempoParaParar = vInicial / desaceleracao;",
+                "",
+                "// 2. Never let the time used go past the stopping point",
+                "var t = Math.min(tOriginal, tempoParaParar);",
+                "",
+                "// 3. Displacement formula (uniformly varied motion)",
+                "(vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);"
+            ].join("\n")
+        }
+    ];
+
+    // Caminho de uma propriedade a partir da layer (índices), para reencontrar
+    // a propriedade depois de adicionar efeitos (o AE invalida as referências).
+    function propertyPath(prop) {
+        var path = [];
+        var p = prop;
+
+        while (p.parentProperty) {
+            path.unshift(p.propertyIndex);
+            p = p.parentProperty;
+        }
+
+        return {layer: p, path: path};
+    }
+
+    function resolvePropertyPath(ref) {
+        var p = ref.layer;
+        for (var i = 0; i < ref.path.length; i++) p = p.property(ref.path[i]);
+        return p;
+    }
+
+    // Garante que a layer tenha um Slider Control com esse nome.
+    function ensureSliderControl(layer, name) {
+        var parade = layer.property("ADBE Effect Parade");
+        if (!parade) return false;
+        if (parade.property(name)) return false;
+
+        var fx = parade.addProperty("ADBE Slider Control");
+        fx.name = name;
+        return true;
+    }
+
+    /*
+        Aba Expressões (versão compacta).
+        Dropdown de categoria + dropdown de expressão, uma linha com a
+        descrição, o código num campo menor e os botões em ícones.
+    */
+    function buildExpressionsTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
+
+        var ALL = "All";
+        var MINE = "★ Mine";
+
+        var favorites = loadExpressionFavorites();
+        var shown = [];     // entradas do dropdown, na mesma ordem (null = separador)
+        var current = null; // entrada carregada no editor
+        var busy = false;
+
+        // ----- escolher -----
+        var pickRow = tab.add("group");
+        pickRow.orientation = "row";
+        pickRow.alignChildren = ["fill", "center"];
+        pickRow.spacing = 4;
+
+        var ddCat = pickRow.add("dropdownlist", undefined, []);
+        ddCat.preferredSize.width = 92;
+        ddCat.helpTip = "Category";
+
+        var ddExpr = pickRow.add("dropdownlist", undefined, []);
+        uiFlex(ddExpr);
+        ddExpr.helpTip = "Pick an expression to see its tutorial and apply it";
+
+        var infoText = uiFlex(uiLabel(tab, ""), 60);
+
+        // ----- código -----
+        var txtCode = tab.add("edittext", undefined, "", {
+            multiline: true,
+            scrolling: true,
+            wantReturn: true
+        });
+        txtCode.alignment = ["fill", "top"];
+        txtCode.preferredSize = [60, 96];
+
+        // ----- nome + ações em ícones -----
+        var nameRow = tab.add("group");
+        nameRow.orientation = "row";
+        nameRow.alignChildren = ["fill", "center"];
+        nameRow.spacing = 3;
+
+        var txtName = uiFlex(nameRow.add("edittext", undefined, ""));
+        txtName.helpTip = "Name (to save to your favorites)";
+
+        var btnNew = uiIconButton(nameRow, {icon: "plus", tip: "New: clears the editor"});
+        var btnCapture = uiIconButton(nameRow, {icon: "capture", tip: "Capture: copies the expression from the selected property"});
+        var btnSave = uiIconButton(nameRow, {icon: "save", tip: "Save to your favorites (★ Mine)"});
+        var btnDelete = uiIconButton(nameRow, {icon: "trash", tip: "Delete one of your favorites"});
+
+        var applyRow = tab.add("group");
+        applyRow.orientation = "row";
+        applyRow.alignChildren = ["fill", "center"];
+        applyRow.spacing = 6;
+
+        var cbNeeds = uiFlex(applyRow.add("checkbox", undefined, "Create controls"));
+        cbNeeds.value = loadSetting("exprCreateControls", "1") === "1";
+        cbNeeds.helpTip = "Create the Slider Control on the layer if the expression needs it";
+
+        var btnApply = uiIconButton(applyRow, {icon: "value", label: "APPLY", primary: true, height: 24,
+            tip: "Apply to the selected properties"});
+        uiFlex(btnApply, 60);
+
+        var status = addStatus(tab, "Pick an expression. The tutorial is at the top of the code.");
+
+        // ----- lógica -----
+
+        function allEntries() {
+            var out = [];
+            var i;
+
+            for (i = 0; i < favorites.length; i++) {
+                out.push({kind: "user", name: favorites[i].name, cat: MINE, target: "—", desc: "", needs: [], code: favorites[i].code});
+            }
+
+            for (i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                var e = EXPRESSION_LIBRARY[i];
+                out.push({kind: "lib", name: e.name, cat: e.cat, target: e.target, desc: e.desc, needs: e.needs, code: e.code});
+            }
+
+            return out;
+        }
+
+        function refreshCategories() {
+            busy = true;
+            var keep = ddCat.selection ? ddCat.selection.text : loadSetting("exprCategory", ALL);
+            var names = [ALL, MINE];
+            var seen = {};
+
+            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                var c = EXPRESSION_LIBRARY[i].cat;
+                if (!seen["k" + c]) {
+                    seen["k" + c] = true;
+                    names.push(c);
+                }
+            }
+
+            ddCat.removeAll();
+            var pick = 0;
+
+            for (i = 0; i < names.length; i++) {
+                ddCat.add("item", names[i]);
+                if (names[i] === keep) pick = i;
+            }
+
+            ddCat.selection = pick;
+            busy = false;
+        }
+
+        // Dropdown de expressões: separador entre categorias quando "Todas".
+        function refreshList(keepName) {
+            var cat = ddCat.selection ? ddCat.selection.text : ALL;
+            var entries = allEntries();
+            var lastCat = null;
+            var pick = 0;
+
+            busy = true;
+            ddExpr.removeAll();
+            shown = [];
+
+            ddExpr.add("item", "— pick an expression —");
+            shown.push(null);
+
+            for (var i = 0; i < entries.length; i++) {
+                var e = entries[i];
+                if (cat !== ALL && e.cat !== cat) continue;
+
+                if (cat === ALL && e.cat !== lastCat) {
+                    ddExpr.add("separator");
+                    shown.push(null);
+                    lastCat = e.cat;
+                }
+
+                ddExpr.add("item", (e.kind === "user" ? "★ " : "") + e.name);
+                shown.push(e);
+                if (keepName && keepName === e.name) pick = shown.length - 1;
+            }
+
+            ddExpr.selection = pick;
+            busy = false;
+        }
+
+        function describe(e) {
+            if (!e) {
+                infoText.text = "";
+                infoText.helpTip = "";
+                return;
+            }
+
+            if (e.kind === "user") {
+                infoText.text = "Expression saved by you.";
+                infoText.helpTip = "";
+                return;
+            }
+
+            infoText.text = "Apply to: " + e.target + (e.needs.length ? "   ·   Needs: " + e.needs.join(", ") : "");
+            infoText.helpTip = e.desc + "\n" + infoText.text;
+        }
+
+        function loadSelected() {
+            if (busy || !ddExpr.selection) return;
+
+            var e = shown[ddExpr.selection.index];
+            if (!e) return;
+
+            current = e;
+            txtName.text = e.name;
+            txtCode.text = e.code;
+            describe(e);
+            status.text = e.desc || ("Favorite: " + e.name);
+        }
+
+        function applyCurrentExpression() {
+            var code = txtCode.text;
+
+            if (trimString(code) === "") {
+                alert("The expression is empty.");
+                return;
+            }
+
+            var props = collectSelectedExpressionProperties();
+
+            if (props.length === 0) {
+                alert("Select one or more properties that accept expressions.");
+                return;
+            }
+
+            // Só cria controles se a expressão no editor ainda é a do atalho.
+            var needs = (current && current.kind === "lib" && current.code === code) ? current.needs : [];
+            var applied = 0;
+            var created = 0;
+            var errors = [];
+            var warnings = [];
+            var i;
+
+            saveSetting("exprCreateControls", cbNeeds.value ? "1" : "0");
+
+            app.beginUndoGroup("Mesmo Tools - Expression" + (current ? " " + current.name : ""));
+
+            try {
+                if (needs.length && cbNeeds.value) {
+                    var refs = [];
+                    for (i = 0; i < props.length; i++) refs.push(propertyPath(props[i]));
+
+                    for (i = 0; i < refs.length; i++) {
+                        for (var n = 0; n < needs.length; n++) {
+                            try {
+                                if (ensureSliderControl(refs[i].layer, needs[n])) created++;
+                            } catch (eFx) {}
+                        }
+                    }
+
+                    // Adicionar efeitos invalida as referências: reencontra as propriedades.
+                    props = [];
+                    for (i = 0; i < refs.length; i++) {
+                        try { props.push(resolvePropertyPath(refs[i])); } catch (eRes) {}
+                    }
+                }
+
+                for (i = 0; i < props.length; i++) {
+                    var propName = "Property";
+                    try { propName = props[i].name; } catch (nameErr) {}
+
+                    try {
+                        props[i].expression = code;
+                        applied++;
+
+                        var exprErr = "";
+                        try { exprErr = props[i].expressionError; } catch (eErr) {}
+                        if (exprErr) warnings.push(propName + ": " + exprErr);
+                    } catch (e) {
+                        errors.push(propName + ": " + e.toString().replace("Error: ", ""));
+                    }
+                }
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text =
+                applied + " propert(ies) updated" +
+                (created ? " | " + created + " Slider Control(s) created" : "") +
+                (errors.length ? " | " + errors.length + " error(s)" : "") +
+                (warnings.length ? " | " + warnings.length + " with expression errors" : "") +
+                ".";
+
+            if (errors.length || warnings.length) {
+                var msg = "";
+                if (errors.length) {
+                    msg += "Could not apply to:\n" + errors.join("\n");
+                }
+                if (warnings.length) {
+                    if (msg) msg += "\n\n";
+                    msg += "Applied, but the expression has an error in:\n" + warnings.join("\n") +
+                        "\n\nCheck the tutorial at the top of the expression: you may need to " +
+                        "rename a layer or create a control.";
+                }
+                alert(msg);
+            }
+        }
+
+        ddCat.onChange = function () {
+            if (busy || !ddCat.selection) return;
+            saveSetting("exprCategory", ddCat.selection.text);
+            refreshList(current ? current.name : null);
+        };
+
+        ddExpr.onChange = loadSelected;
+
+        btnNew.onClick = function () {
+            current = null;
+            ddExpr.selection = 0;
+            txtName.text = "";
+            txtCode.text = "";
+            describe(null);
+            status.text = "New expression: write or capture it, name it and save.";
+        };
+
+        btnSave.onClick = function () {
+            var name = trimString(txtName.text);
+            var code = txtCode.text;
+
+            if (name === "") {
+                alert("Give the expression a name.");
+                return;
+            }
+
+            if (trimString(code) === "") {
+                alert("The expression is empty.");
+                return;
+            }
+
+            // Um atalho do Mesmo nunca é sobrescrito: vira uma cópia sua.
+            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                if (EXPRESSION_LIBRARY[i].name === name) {
+                    name += " (mine)";
+                    break;
+                }
+            }
+
+            var idx = findFavoriteIndex(favorites, name);
+
+            if (idx === -1) favorites.push({name: name, code: code});
+            else favorites[idx].code = code;
+
+            if (saveExpressionFavorites(favorites)) {
+                current = {kind: "user", name: name, cat: MINE, target: "—", desc: "", needs: [], code: code};
+                txtName.text = name;
+                refreshList(name);
+                describe(current);
+                status.text = "Saved to ★ Mine: " + name;
+            }
+        };
+
+        btnDelete.onClick = function () {
+            if (current && current.kind === "lib") {
+                alert("Mesmo shortcuts can't be deleted. Only your favorites (★ Mine).");
+                return;
+            }
+
+            var name = trimString(txtName.text);
+            if (name === "" && current) name = current.name;
+
+            var idx = findFavoriteIndex(favorites, name);
+
+            if (idx === -1) {
+                alert("Select one of your favorites to delete.");
+                return;
+            }
+
+            if (!confirm("Delete the expression \"" + name + "\"?")) return;
+
+            favorites.splice(idx, 1);
+
+            if (saveExpressionFavorites(favorites)) {
+                current = null;
+                txtName.text = "";
+                txtCode.text = "";
+                describe(null);
+                refreshList(null);
+                status.text = "Expression deleted: " + name;
+            }
+        };
+
+        btnCapture.onClick = function () {
+            var props = collectSelectedExpressionProperties();
+
+            if (props.length === 0) {
+                alert("Select a property with an expression.");
+                return;
+            }
+
+            var captured = "";
+            try { captured = props[0].expression; } catch (e) {}
+
+            if (trimString(captured) === "") {
+                alert("The first selected property has no expression.");
+                return;
+            }
+
+            current = null;
+            ddExpr.selection = 0;
+            txtCode.text = captured;
+            describe(null);
+
+            if (trimString(txtName.text) === "") {
+                try { txtName.text = props[0].name; } catch (nameErr) { txtName.text = "Expression"; }
+            }
+
+            status.text = "Expression captured. Name it and save.";
+        };
+
+        btnApply.onClick = applyCurrentExpression;
+
+        refreshCategories();
+        refreshList(null);
     }
 
     // ================================================================
@@ -4879,6 +6209,12 @@
                     {label: "Settings", build: buildCompsTab, width: 300},
                     {label: "Duplicate", build: buildDuplicaTab, width: 300},
                     {label: "3D / Blur", build: build3DTab, width: 270}
+                ]
+            },
+            {
+                label: "Expressions", abbr: "Expr", tip: "Expression shortcuts and your favorites",
+                tools: [
+                    {label: "Expressions", build: buildExpressionsTab, width: 340, noHeader: true}
                 ]
             }
         ];

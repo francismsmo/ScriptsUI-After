@@ -35,10 +35,12 @@ HEADER_EN = '''/*
     - Animation = Curves + Explode (on the same screen)
     - Layers = Create + Anchor Point + Extract + Beats
     - Comps = Settings + Duplicate + 3D / Blur (on the same screen)
+    - Expressions: ready-made shortcuts + your favorite expressions
 
     Files saved in Folder.userData/MesmoTools/ (shared with the
     Portuguese version):
     - speed_curves.txt          (curves)
+    - expression_favorites.txt  (expressions)
 */
 
 '''
@@ -380,6 +382,20 @@ TR = {
     "Numerar": "Number",
     "Clique num ponto.": "Click a point.",
     "Anchor · Extract": "Anchor · Extract",
+
+    # ---- v2.15 (expressões compactas)
+    "— escolha uma expressão —": "— pick an expression —",
+    "Categoria": "Category",
+    "Escolha uma expressão para ver o tutorial e aplicar": "Pick an expression to see its tutorial and apply it",
+    "Nome (para salvar nas suas favoritas)": "Name (to save to your favorites)",
+    "Nova: limpa o editor": "New: clears the editor",
+    "Capturar: copia a expressão da propriedade selecionada": "Capture: copies the expression from the selected property",
+    "Salvar nas suas favoritas (★ Minhas)": "Save to your favorites (★ Mine)",
+    "Excluir uma das suas favoritas": "Delete one of your favorites",
+    "Criar controles": "Create controls",
+    "APLICAR": "APPLY",
+    "Aplicar nas propriedades selecionadas": "Apply to the selected properties",
+    "Escolha uma expressão. O tutorial vem no topo do código.": "Pick an expression. The tutorial is at the top of the code.",
 
     # ---- navegação
     "Animação": "Animation",

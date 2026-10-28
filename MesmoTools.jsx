@@ -6,13 +6,17 @@
     - Animação = Curvas + Explode (juntos na mesma tela)
     - Camadas = Criar + Anchor Point + Extract + Batidas
     - Comps = Ajustes + Duplicar + 3D / Blur (juntos na mesma tela)
+    - Expressões: atalhos prontos + suas expressões favoritas
 
     Arquivos salvos em Folder.userData/MesmoTools/:
     - speed_curves.txt          (curvas)
+    - expression_favorites.txt  (expressões)
 
-    Versão atual: v2.14 (mude SCRIPT_VERSION a cada alteração: 2.15, 2.16...)
+    Versão atual: v2.15 (mude SCRIPT_VERSION a cada alteração: 2.16, 2.17...)
     Histórico completo em CHANGELOG.md.
 
+    v2.15 - Volta a aba Expressões, compacta: dropdowns de categoria e
+            expressão, código menor e ações em ícones.
     v2.14 - Interface compacta: botões e dropdowns menores, ícones; Curvas
             com modos Clássico | Valor | Velocidade; Explode e
             Anchor·Extract lado a lado; Criar e 3D/Blur com ícones; sai a
@@ -55,7 +59,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.14";
+    var SCRIPT_VERSION = "2.15";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -472,6 +476,24 @@
                 g.rectPath(x + cells[i][0] * s, y + cells[i][1] * s, s * 0.42, s * 0.42);
                 g.fillPath(uiBrush(g, c));
             }
+        },
+        plus: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + s / 2 - 1, y + 1, 2, s - 2);
+            g.rectPath(x + 1, y + s / 2 - 1, s - 2, 2);
+            g.fillPath(uiBrush(g, c));
+        },
+        // capturar: mira
+        capture: function (g, x, y, s, c) {
+            g.newPath();
+            g.ellipsePath(x + s * 0.18, y + s * 0.18, s * 0.64, s * 0.64);
+            g.strokePath(uiPen(g, c, 1.5));
+            g.newPath();
+            g.rectPath(x + s / 2 - 0.75, y, 1.5, s * 0.3);
+            g.rectPath(x + s / 2 - 0.75, y + s * 0.7, 1.5, s * 0.3);
+            g.rectPath(x, y + s / 2 - 0.75, s * 0.3, 1.5);
+            g.rectPath(x + s * 0.7, y + s / 2 - 0.75, s * 0.3, 1.5);
+            g.fillPath(uiBrush(g, c));
         },
         beats: function (g, x, y, s, c) {
             var hs = [0.35, 0.8, 0.5, 1, 0.4];
@@ -2686,6 +2708,1320 @@
         disable3DButton.onClick = function () { processSelection(MODES.threeD, false); };
         mbOnButton.onClick = function () { processSelection(MODES.motionBlur, true); };
         mbOffButton.onClick = function () { processSelection(MODES.motionBlur, false); };
+    }
+
+    function getExpressionStoreFile() {
+        var dir = new Folder(Folder.userData.fsName + "/MesmoTools");
+
+        if (!dir.exists) {
+            try {
+                dir.create();
+            } catch (e) {}
+        }
+
+        return new File(dir.fsName + "/expression_favorites.txt");
+    }
+
+    function loadExpressionFavorites() {
+        var out = [];
+        var f = getExpressionStoreFile();
+
+        if (!f.exists) return out;
+
+        try {
+            f.encoding = "UTF-8";
+
+            if (!f.open("r")) return out;
+
+            while (!f.eof) {
+                var line = f.readln();
+
+                if (line === "") continue;
+
+                var tabIndex = line.indexOf("\t");
+                if (tabIndex === -1) continue;
+
+                var nameEnc = line.substring(0, tabIndex);
+                var codeEnc = line.substring(tabIndex + 1);
+
+                try {
+                    out.push({
+                        name: decodeURIComponent(nameEnc),
+                        code: decodeURIComponent(codeEnc)
+                    });
+                } catch (decodeErr) {}
+            }
+
+            f.close();
+        } catch (e) {
+            try { f.close(); } catch (closeErr) {}
+        }
+
+        return out;
+    }
+
+    function saveExpressionFavorites(favorites) {
+        var f = getExpressionStoreFile();
+
+        try {
+            f.encoding = "UTF-8";
+
+            if (!f.open("w")) {
+                throw new Error("Não foi possível abrir o arquivo de favoritos.");
+            }
+
+            for (var i = 0; i < favorites.length; i++) {
+                f.writeln(
+                    encodeURIComponent(favorites[i].name) +
+                    "\t" +
+                    encodeURIComponent(favorites[i].code)
+                );
+            }
+
+            f.close();
+            return true;
+
+        } catch (e) {
+            try { f.close(); } catch (closeErr) {}
+            alert(
+                "Não foi possível salvar os favoritos:\n" +
+                e.toString().replace("Error: ", "") + WRITE_HELP
+            );
+            return false;
+        }
+    }
+
+    function findFavoriteIndex(favorites, name) {
+        for (var i = 0; i < favorites.length; i++) {
+            if (favorites[i].name === name) return i;
+        }
+
+        return -1;
+    }
+
+    function collectSelectedExpressionProperties() {
+        var out = [];
+        var comp = app.project ? app.project.activeItem : null;
+
+        if (!isComp(comp)) return out;
+
+        function addProp(p) {
+            if (!p) return;
+
+            var canSet = false;
+
+            try {
+                canSet = p.canSetExpression === true;
+            } catch (e0) {}
+
+            if (!canSet) return;
+
+            for (var k = 0; k < out.length; k++) {
+                if (out[k] === p) return;
+            }
+
+            out.push(p);
+        }
+
+        try {
+            var compProps = comp.selectedProperties;
+
+            if (compProps && compProps.length) {
+                for (var i = 0; i < compProps.length; i++) {
+                    addProp(compProps[i]);
+                }
+            }
+        } catch (e1) {}
+
+        try {
+            var layers = comp.selectedLayers;
+
+            for (var j = 0; j < layers.length; j++) {
+                var props = layers[j].selectedProperties;
+
+                if (!props) continue;
+
+                for (var p = 0; p < props.length; p++) {
+                    addProp(props[p]);
+                }
+            }
+        } catch (e2) {}
+
+        return out;
+    }
+
+    // ================================================================
+    // BIBLIOTECA DE EXPRESSÕES DO MESMO
+    // Gerada a partir de github.com/francismsmo/After-effects-Expressions.
+    // Cada atalho traz descrição, onde aplicar e um tutorial em comentário.
+    // ================================================================
+
+    var EXPRESSION_LIBRARY = [
+        {
+            name: "Delay do Control — Position",
+            cat: "Delay",
+            target: "Position",
+            desc: "A camada segue a Position do pai (parent) com alguns frames de atraso. Use valores de delay diferentes em cada camada para um efeito em cascata.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   DELAY DO CONTROL — POSITION",
+                "   Aplicar em: Position da camada que vai seguir o Control",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   A camada repete o movimento da camada pai (parent), só que alguns",
+                "   frames atrasada. Dá aquele efeito de \"arrasto\" / follow-through",
+                "   em cascata.",
+                "",
+                "   Como usar:",
+                "   1. Crie uma camada de controle (ex.: um Null chamado \"Control\")",
+                "      e anime a Position dela.",
+                "   2. Faça o parent das camadas que vão seguir para o Control",
+                "      (pick whip do Parent & Link).",
+                "   3. Cole esta expressão na Position de cada camada filha.",
+                "   4. Ajuste delayFrames abaixo. Use valores diferentes em cada",
+                "      camada (3, 6, 9...) para o efeito de cascata.",
+                "",
+                "   Observações:",
+                "   - Sem parent, a camada fica parada no próprio valor.",
+                "   - Funciona melhor com o Control sem rotação e com escala 100%,",
+                "     porque o atraso é somado no espaço do pai.",
+                "   ============================================================ */",
+                "",
+                "var delayFrames = 3; // Ajuste aqui quantos frames de atraso você quer",
+                "var delayTime = framesToTime(delayFrames);",
+                "",
+                "// Definimos o alvo (o seu objeto Control)",
+                "var target = parent;",
+                "",
+                "if (target != null) {",
+                "    // Calculamos onde o Control estava há 'X' frames atrás",
+                "    var delayedPos = target.transform.position.valueAtTime(time - delayTime);",
+                "",
+                "    // Calculamos onde o Control está AGORA",
+                "    var currentPos = target.transform.position.valueAtTime(time);",
+                "",
+                "    // Diferença de movimento (Delta)",
+                "    var delta = delayedPos - currentPos;",
+                "",
+                "    // Aplica o movimento ao valor original da camada (mantendo o layout)",
+                "    value + delta;",
+                "} else {",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Delay do Control — Rotation",
+            cat: "Delay",
+            target: "Rotation",
+            desc: "A camada repete a rotação do pai (parent) com alguns frames de atraso.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   DELAY DO CONTROL — ROTATION",
+                "   Aplicar em: Rotation da camada que vai seguir o Control",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   A camada repete a rotação da camada pai (parent), só que alguns",
+                "   frames atrasada. Dá aquele efeito de \"arrasto\" / follow-through",
+                "   em cascata.",
+                "",
+                "   Como usar:",
+                "   1. Crie uma camada de controle (ex.: um Null chamado \"Control\")",
+                "      e anime a Rotation dela.",
+                "   2. Faça o parent das camadas que vão seguir para o Control",
+                "      (pick whip do Parent & Link).",
+                "   3. Cole esta expressão na Rotation de cada camada filha.",
+                "   4. Ajuste delayFrames abaixo. Use valores diferentes em cada",
+                "      camada (3, 6, 9...) para o efeito de cascata.",
+                "",
+                "   Observações:",
+                "   - Sem parent, a camada fica parada no próprio valor.",
+                "   - Em camadas 3D, aplique na Z Rotation.",
+                "   ============================================================ */",
+                "",
+                "var delayFrames = 3; // Quantos frames de atraso",
+                "var delayTime = framesToTime(delayFrames);",
+                "var target = parent;",
+                "",
+                "if (target != null) {",
+                "    // Calcula a diferença de rotação do pai",
+                "    var rotaPaiAtrasada = target.transform.rotation.valueAtTime(time - delayTime);",
+                "    var rotaPaiAgora = target.transform.rotation.valueAtTime(time);",
+                "    var delta = rotaPaiAtrasada - rotaPaiAgora;",
+                "",
+                "    // Rotação própria da camada + o atraso do pai",
+                "    value + delta;",
+                "} else {",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Delay do Control — Scale",
+            cat: "Delay",
+            target: "Scale",
+            desc: "A camada repete a escala do pai (parent) com alguns frames de atraso. Ótimo para pops em cascata.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   DELAY DO CONTROL — SCALE",
+                "   Aplicar em: Scale da camada que vai seguir o Control",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   A camada repete a escala da camada pai (parent), só que alguns",
+                "   frames atrasada. Dá aquele efeito de \"arrasto\" / follow-through",
+                "   em cascata.",
+                "",
+                "   Como usar:",
+                "   1. Crie uma camada de controle (ex.: um Null chamado \"Control\")",
+                "      e anime a Scale dela.",
+                "   2. Faça o parent das camadas que vão seguir para o Control",
+                "      (pick whip do Parent & Link).",
+                "   3. Cole esta expressão na Scale de cada camada filha.",
+                "   4. Ajuste delayFrames abaixo. Use valores diferentes em cada",
+                "      camada (3, 6, 9...) para o efeito de cascata.",
+                "",
+                "   Observações:",
+                "   - Sem parent, a camada fica parada no próprio valor.",
+                "   - Funciona melhor com escala uniforme no Control (X = Y)",
+                "     e em animações rápidas, tipo pops.",
+                "   ============================================================ */",
+                "",
+                "var delayFrames = 3; // Quantos frames de atraso",
+                "var delayTime = framesToTime(delayFrames);",
+                "var target = parent;",
+                "",
+                "if (target != null) {",
+                "    // Calcula a diferença de escala do pai",
+                "    var escalaPaiAtrasada = target.transform.scale.valueAtTime(time - delayTime);",
+                "    var escalaPaiAgora = target.transform.scale.valueAtTime(time);",
+                "    var delta = escalaPaiAtrasada - escalaPaiAgora;",
+                "",
+                "    // Escala própria da camada + o atraso do pai",
+                "    value + delta;",
+                "} else {",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Wiggle crescente",
+            cat: "Wiggle",
+            target: "Scale",
+            desc: "Wiggle que começa parado e vai ficando mais forte com o tempo, sem limite. Mantém a proporção da escala.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   WIGGLE CRESCENTE (sem limite)",
+                "   Aplicar em: Scale",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   A intensidade do wiggle começa em 0 e aumenta growthRate a",
+                "   cada segundo. Usa o mesmo valor em X e Y, então a camada",
+                "   pulsa sem distorcer.",
+                "",
+                "   Como usar:",
+                "   1. Cole na Scale da camada.",
+                "   2. growthRate = quanto a intensidade cresce por segundo.",
+                "   3. O 0.5 dentro do wiggle é a frequência (tremidas por segundo).",
+                "",
+                "   Observações:",
+                "   - Conta a partir do início da comp (time = 0). Se a camada",
+                "     começa depois, troque time por (time - inPoint).",
+                "   - Quer um teto? Use o atalho \"Wiggle crescente com limite\".",
+                "   ============================================================ */",
+                "",
+                "// Rate defines how much the wiggle intensity increases per second",
+                "var growthRate = 10;",
+                "var dynamicAmount = time * growthRate;",
+                "",
+                "// Wiggle(frequency, amplitude)",
+                "var w = wiggle(0.5, dynamicAmount);",
+                "",
+                "// Mesmo valor em X e Y = mantém a proporção",
+                "[w[0], w[0]]"
+            ].join("\n")
+        },
+        {
+            name: "Wiggle crescente com limite",
+            cat: "Wiggle",
+            target: "Scale",
+            desc: "Igual ao wiggle crescente, mas para de crescer quando chega no limite.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   WIGGLE CRESCENTE COM LIMITE",
+                "   Aplicar em: Scale",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   A intensidade do wiggle cresce growthRate por segundo até",
+                "   chegar em limit, e daí em diante fica constante. Mantém a",
+                "   proporção da escala.",
+                "",
+                "   Como usar:",
+                "   1. Cole na Scale da camada.",
+                "   2. growthRate = quanto cresce por segundo.",
+                "   3. limit = intensidade máxima.",
+                "      Ex.: growthRate 10 e limit 30 -> chega no máximo em 3 s.",
+                "",
+                "   Observação: conta a partir do início da comp. Se a camada",
+                "   começa depois, troque time por (time - inPoint).",
+                "   ============================================================ */",
+                "",
+                "var growthRate = 10; // Increases by 10 every second",
+                "var limit = 30;      // Intensidade máxima",
+                "",
+                "// This will grow until it hits 30, then stay there",
+                "var dynamicAmount = Math.min(time * growthRate, limit);",
+                "",
+                "var w = wiggle(0.5, dynamicAmount);",
+                "",
+                "// Mesmo valor em X e Y = mantém a proporção",
+                "[w[0], w[0]]"
+            ].join("\n")
+        },
+        {
+            name: "Wiggle diminuindo",
+            cat: "Wiggle",
+            target: "Rotation",
+            desc: "Wiggle que começa forte e vai acalmando até parar. Bom para algo que balança e se estabiliza.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   WIGGLE DIMINUINDO (amortecido)",
+                "   Aplicar em: Rotation (funciona em qualquer propriedade)",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Começa com intensidade startAmount e perde decayRate por",
+                "   segundo até chegar em 0, quando a camada para de tremer.",
+                "",
+                "   Como usar:",
+                "   1. Cole na Rotation da camada.",
+                "   2. startAmount = intensidade inicial (graus, na Rotation).",
+                "   3. decayRate = quanto perde por segundo.",
+                "      Ex.: 30 e 10 -> para totalmente em 3 s.",
+                "",
+                "   Observações:",
+                "   - Em Position e Scale também funciona; o wiggle devolve o",
+                "     valor completo da propriedade.",
+                "   - Conta a partir do início da comp. Se a camada começa",
+                "     depois, troque time por (time - inPoint).",
+                "   ============================================================ */",
+                "",
+                "var startAmount = 30; // Intensidade inicial",
+                "var decayRate = 10;   // Quanto diminui por segundo",
+                "",
+                "// Nunca fica negativo: para em 0",
+                "var dynamicAmount = Math.max(startAmount - (time * decayRate), 0);",
+                "",
+                "// Em Rotation, o wiggle já retorna o valor final direto",
+                "wiggle(0.5, dynamicAmount);"
+            ].join("\n")
+        },
+        {
+            name: "Wiggle em loop",
+            cat: "Wiggle",
+            target: "Qualquer propriedade",
+            desc: "Wiggle que se repete perfeitamente a cada X segundos, sem pulo no ponto do loop. Ideal para vídeos em loop e GIFs.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   WIGGLE EM LOOP PERFEITO",
+                "   Aplicar em: qualquer propriedade (Position, Rotation, Scale...)",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Mistura dois wiggles iguais deslocados de loopTime. O final",
+                "   do ciclo encaixa exatamente no começo, então dá para repetir",
+                "   sem \"pulo\".",
+                "",
+                "   Como usar:",
+                "   1. Cole na propriedade.",
+                "   2. freq = quantas vezes por segundo se mexe.",
+                "   3. amp = tamanho do movimento (px, graus ou %).",
+                "   4. loopTime = duração do loop em segundos. Use a duração",
+                "      da comp (ou uma fração dela) para o loop fechar certinho.",
+                "   ============================================================ */",
+                "",
+                "// --- CONFIGURAÇÕES ---",
+                "freq = 2;       // Frequência (quantas vezes se move por segundo)",
+                "amp = 50;       // Amplitude (distância/tamanho da variação)",
+                "loopTime = 10;  // Duração do loop em segundos",
+                "",
+                "// --- CÁLCULO DO LOOP ---",
+                "t = time % loopTime;",
+                "w1 = wiggle(freq, amp, 1, 0.5, t);",
+                "w2 = wiggle(freq, amp, 1, 0.5, t - loopTime);",
+                "",
+                "// Interpolação entre o primeiro e o segundo wiggle",
+                "linear(t, 0, loopTime, w1, w2);"
+            ].join("\n")
+        },
+        {
+            name: "Wiggle na escala proporcional",
+            cat: "Wiggle",
+            target: "Scale",
+            desc: "Wiggle na Scale sem distorcer: largura e altura variam juntas.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   WIGGLE NA ESCALA MANTENDO A PROPORÇÃO",
+                "   Aplicar em: Scale",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Um wiggle normal na Scale sorteia X e Y separados e a camada",
+                "   \"estica\". Aqui o X é usado nos dois eixos, então ela só cresce",
+                "   e encolhe por igual.",
+                "",
+                "   Como usar:",
+                "   1. Cole na Scale.",
+                "   2. wiggle(5, 30): 5 = frequência (vezes por segundo),",
+                "      30 = intensidade (em %).",
+                "   ============================================================ */",
+                "",
+                "//This Wiggle on Scale keep the aspect ratio the same.",
+                "w = wiggle(5, 30);",
+                "",
+                "// Mesmo valor em X e Y",
+                "[w[0], w[0]]"
+            ].join("\n")
+        },
+        {
+            name: "Revelar texto letra por letra",
+            cat: "Texto",
+            target: "Range Selector > Start",
+            desc: "Revela o texto uma letra por frame, do jeito máquina de escrever. A duração se ajusta sozinha ao tamanho do texto.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   REVELAR TEXTO LETRA POR LETRA",
+                "   Aplicar em: Start do Range Selector de um animator de Opacity",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Anima o Start de 0 a 100 em tantos frames quantas letras o",
+                "   texto tiver: 1 letra por frame. Se o texto muda, a duração",
+                "   acompanha.",
+                "",
+                "   Como usar:",
+                "   1. Na camada de texto: Animate > Opacity.",
+                "   2. No animator criado, coloque Opacity = 0%.",
+                "   3. Abra o Range Selector 1 e cole esta expressão no Start.",
+                "   4. O texto aparece da esquerda para a direita.",
+                "",
+                "   Dicas:",
+                "   - Mais lento: troque framesToTime(numChars) por",
+                "     framesToTime(numChars * 2) (2 frames por letra).",
+                "   - Começa no início da comp. Para começar quando a camada",
+                "     entra, troque time por (time - inPoint).",
+                "   ============================================================ */",
+                "",
+                "//Inserir seguinte animação - Opacity 0% e inserir esse código no Start",
+                "",
+                "var numChars = text.sourceText.length;  // quantas letras o texto tem",
+                "var finalTime = framesToTime(numChars); // 1 frame por letra",
+                "linear(time, 0, finalTime, 0, 100);"
+            ].join("\n")
+        },
+        {
+            name: "Encadear texto APOIO depois do PRINCIPAL",
+            cat: "Texto",
+            target: "Range Selector > Start (camada APOIO)",
+            desc: "Faz a animação da camada APOIO começar sozinha assim que a camada PRINCIPAL termina de animar (Start chega em 100).",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   ENCADEAR TEXTO: APOIO COMEÇA QUANDO O PRINCIPAL TERMINA",
+                "   Aplicar em: Start do Range Selector da camada APOIO",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Fica olhando o Start do Range Selector da camada PRINCIPAL.",
+                "   Quando ele chega em 100 (animação terminou), o Start da APOIO",
+                "   vai de 0 a 100 em 15 frames. Se você mudar o timing do",
+                "   PRINCIPAL, a APOIO acompanha sozinha.",
+                "",
+                "   Como usar:",
+                "   1. Tenha duas camadas de texto chamadas PRINCIPAL e APOIO,",
+                "      cada uma com \"Animator 1\" > \"Range Selector 1\".",
+                "   2. Anime (ou use expressão) no Start da PRINCIPAL indo até 100.",
+                "   3. Cole esta expressão no Start do Range Selector da APOIO.",
+                "   4. Ajuste a duração em framesToTime(15).",
+                "",
+                "   Observações:",
+                "   - Os nomes das camadas, do animator e do selector precisam",
+                "     ser exatamente esses. Se renomear, troque aqui também.",
+                "   - A expressão procura para trás frame a frame; em comps muito",
+                "     longas pode deixar o preview um pouco mais lento.",
+                "   ============================================================ */",
+                "",
+                "// Aplicar no Start do Range Selector da camada APOIO",
+                "// A animação começa quando o Start da camada PRINCIPAL chega a 100.",
+                "",
+                "var anterior = thisComp",
+                "    .layer(\"PRINCIPAL\")",
+                "    .text",
+                "    .animator(\"Animator 1\")",
+                "    .selector(\"Range Selector 1\")",
+                "    .start;",
+                "",
+                "var duracao = framesToTime(15); // duração da animação da APOIO",
+                "",
+                "if (anterior < 100){",
+                "    0; // PRINCIPAL ainda animando: APOIO espera",
+                "}else{",
+                "    var inicio = time;",
+                "",
+                "    // Volta no tempo até achar o frame em que o PRINCIPAL chegou a 100",
+                "    for (var t = time; t >= 0; t -= thisComp.frameDuration){",
+                "        var v = thisComp",
+                "            .layer(\"PRINCIPAL\")",
+                "            .text",
+                "            .animator(\"Animator 1\")",
+                "            .selector(\"Range Selector 1\")",
+                "            .start",
+                "            .valueAtTime(t);",
+                "",
+                "        if (v < 100){",
+                "            inicio = t + thisComp.frameDuration;",
+                "            break;",
+                "        }",
+                "    }",
+                "",
+                "    // A partir dali, anima de 0 a 100",
+                "    linear(time, inicio, inicio + duracao, 0, 100);",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Contador com 2 dígitos (00–99)",
+            cat: "Números",
+            target: "Source Text",
+            desc: "Mostra o valor de um Slider como número inteiro com zero à esquerda (00, 01... 10). Para contadores e placares.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   CONTADOR COM 2 DÍGITOS (00, 01, 02... 10, 11...)",
+                "   Aplicar em: Source Text de uma camada de texto",
+                "   Precisa de: efeito \"Slider Control\" na mesma camada",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Arredonda o valor do Slider e coloca um zero na frente dos",
+                "   números menores que 10.",
+                "",
+                "   Como usar:",
+                "   1. Na camada de texto, adicione Effect > Expression Controls",
+                "      > Slider Control (o painel cria sozinho se faltar).",
+                "   2. Cole esta expressão no Source Text.",
+                "   3. Anime o Slider (ex.: de 0 a 10) e o texto conta.",
+                "   ============================================================ */",
+                "",
+                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
+                "",
+                "// Menor que 10 ganha um zero na frente",
+                "if (s < 10) { \"0\" + s } else { s.toString() }"
+            ].join("\n")
+        },
+        {
+            name: "Contador com 6 dígitos (000.000)",
+            cat: "Números",
+            target: "Source Text",
+            desc: "Mostra o valor de um Slider com 6 dígitos e ponto de milhar (000.000). Para contadores de views, valores, etc.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   CONTADOR COM 6 DÍGITOS (000.000)",
+                "   Aplicar em: Source Text de uma camada de texto",
+                "   Precisa de: efeito \"Slider Control\" na mesma camada",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Arredonda o Slider, completa com zeros até 6 dígitos e põe um",
+                "   ponto no meio. Ex.: 1234 -> \"001.234\".",
+                "",
+                "   Como usar:",
+                "   1. Adicione um Slider Control na camada de texto (o painel",
+                "      cria sozinho se faltar).",
+                "   2. Cole esta expressão no Source Text.",
+                "   3. Anime o Slider de 0 até o valor final (máx. 999999).",
+                "",
+                "   Observação: números negativos e acima de 999.999 não cabem",
+                "   no formato.",
+                "   ============================================================ */",
+                "",
+                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
+                "",
+                "// Completa com zeros à esquerda e pega os 6 últimos dígitos",
+                "txt = (\"000000\" + s).slice(-6);",
+                "",
+                "// Ponto separando os milhares",
+                "txt.slice(0, 3) + \".\" + txt.slice(3);"
+            ].join("\n")
+        },
+        {
+            name: "Timecode de câmera (00:00:SS:FF)",
+            cat: "Números",
+            target: "Source Text",
+            desc: "Simula o timecode de câmera a partir de um Slider que conta frames (30 fps): mostra 00:00:segundos:frames.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   TIMECODE DE CÂMERA (00:00:SS:FF a 30 fps)",
+                "   Aplicar em: Source Text de uma camada de texto",
+                "   Precisa de: efeito \"Slider Control\" na mesma camada",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   O Slider é um contador de FRAMES. A expressão divide por 30 e",
+                "   mostra segundos e frames no formato de timecode de câmera:",
+                "   \"00:00:\" fixo + SS:FF.",
+                "   (No código, \"minutos\" guarda os segundos e \"segundos\" guarda",
+                "   os frames.)",
+                "",
+                "   Como usar:",
+                "   1. Adicione um Slider Control na camada de texto (o painel",
+                "      cria sozinho se faltar).",
+                "   2. Cole esta expressão no Source Text.",
+                "   3. Anime o Slider. Ex.: 0 -> 300 em 10 s faz o timecode",
+                "      andar em tempo real a 30 fps.",
+                "      Atalho: no Slider, use a expressão  time * 30",
+                "",
+                "   Dica: para outro fps, troque os dois 30 pelo fps desejado.",
+                "   ============================================================ */",
+                "",
+                "v = Math.floor(effect(\"Slider Control\")(\"Slider\")); // total de frames",
+                "",
+                "minutos = Math.floor(v / 30); // segundos (30 frames = 1 s)",
+                "segundos = v % 30;            // frames que sobram",
+                "",
+                "minTxt = (minutos < 10) ? (\"0\" + minutos) : minutos.toString();",
+                "segTxt = (segundos < 10) ? (\"0\" + segundos) : segundos.toString();",
+                "",
+                "// texto fixo + timecode",
+                "\"00:00:\" + minTxt + \":\" + segTxt;"
+            ].join("\n")
+        },
+        {
+            name: "Caixa reativa — Anchor Point do texto",
+            cat: "Layout",
+            target: "Anchor Point (camada de texto)",
+            desc: "Parte 1 da caixa reativa: centraliza o Anchor Point do texto, para o texto e a caixa ficarem alinhados pelo centro.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   CAIXA REATIVA — PARTE 1: ANCHOR POINT DO TEXTO",
+                "   Aplicar em: Anchor Point da camada de TEXTO",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Coloca o Anchor Point exatamente no centro do texto, seja qual",
+                "   for o tamanho. Assim o texto cresce para os dois lados e fica",
+                "   alinhado com a caixa.",
+                "",
+                "   Como usar (junto com a Parte 2):",
+                "   1. Troque \"nome da camada\" pelo nome da sua camada de texto",
+                "      (pode ser a própria camada: thisLayer também funciona).",
+                "   2. Cole no Anchor Point do texto.",
+                "   3. Na caixa (shape), use o atalho \"Caixa reativa — Size da",
+                "      caixa\".",
+                "   4. Alinhe texto e caixa na mesma posição (ou faça parent).",
+                "   ============================================================ */",
+                "",
+                "///Camada de texto - Anchor Point:",
+                "",
+                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
+                "",
+                "Height = a.height;",
+                "Width = a.width;",
+                "Left = a.left;",
+                "Top = a.top;",
+                "",
+                "// Centro do retângulo do texto",
+                "x = Left + Width / 2;",
+                "y = Top + Height / 2;",
+                "",
+                "[x, y]"
+            ].join("\n")
+        },
+        {
+            name: "Caixa reativa — Size da caixa",
+            cat: "Layout",
+            target: "Rectangle Path > Size (shape da caixa)",
+            desc: "Parte 2 da caixa reativa: a caixa (shape) muda de tamanho sozinha conforme o texto, com margem controlada por um Slider.",
+            needs: ["Slider Control"],
+            code: [
+                "/* ============================================================",
+                "   CAIXA REATIVA — PARTE 2: SIZE DA CAIXA",
+                "   Aplicar em: Size do Rectangle Path da camada de SHAPE (caixa)",
+                "   Precisa de: efeito \"Slider Control\" na camada da caixa",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Lê o tamanho do texto e faz o retângulo ter esse tamanho mais",
+                "   uma margem (o valor do Slider). Mudou o texto, a caixa",
+                "   acompanha.",
+                "",
+                "   Como usar:",
+                "   1. Crie um retângulo (shape layer > Rectangle).",
+                "   2. Adicione um Slider Control na camada da caixa (o painel",
+                "      cria sozinho se faltar). Ele é a margem em px.",
+                "   3. Troque \"nome da camada\" pelo nome da camada de texto.",
+                "   4. Cole no Size do Rectangle Path.",
+                "   5. Use a Parte 1 no Anchor Point do texto para centralizar.",
+                "",
+                "   Dica: a margem é somada no total; com Slider 40 sobram 20 px",
+                "   de cada lado.",
+                "   ============================================================ */",
+                "",
+                "///Camada da Box - Size dentro dos parâmetros:",
+                "",
+                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
+                "",
+                "Height = a.height;",
+                "Width = a.width;",
+                "",
+                "p = effect(\"Slider Control\")(\"Slider\"); // margem",
+                "x = Width + p;",
+                "y = Height + p;",
+                "",
+                "[x, y]"
+            ].join("\n")
+        },
+        {
+            name: "Tamanho por sliders (Largura/Altura)",
+            cat: "Layout",
+            target: "Rectangle Path > Size",
+            desc: "Controla o tamanho de um retângulo por dois sliders numa camada CONTROLES. Bom para centralizar vários controles num lugar só.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   TAMANHO POR SLIDERS",
+                "   Aplicar em: Size do Rectangle Path (ou qualquer valor [x, y])",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Pega a largura e a altura de dois Sliders numa camada de",
+                "   controle. Várias caixas podem usar os mesmos sliders e mudar",
+                "   juntas.",
+                "",
+                "   Como usar:",
+                "   1. Crie um Null chamado CONTROLES.",
+                "   2. Adicione dois Slider Control nele e renomeie para",
+                "      \"Largura\" e \"Altura\".",
+                "   3. Cole esta expressão no Size do Rectangle Path da caixa.",
+                "   4. Mexa nos sliders do CONTROLES.",
+                "   ============================================================ */",
+                "",
+                "w = thisComp.layer(\"CONTROLES\").effect(\"Largura\")(\"Slider\");",
+                "h = thisComp.layer(\"CONTROLES\").effect(\"Altura\")(\"Slider\");",
+                "",
+                "[w, h]"
+            ].join("\n")
+        },
+        {
+            name: "Escala constante pela câmera (Scale x Z)",
+            cat: "3D",
+            target: "Scale (camada 3D)",
+            desc: "Mantém o tamanho aparente da camada igual mesmo quando ela se aproxima ou se afasta da câmera.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   ESCALA CONSTANTE PELA CÂMERA (Scale x Position Z)",
+                "   Aplicar em: Scale de uma camada 3D",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Calcula a distância entre a camada e a câmera ativa e corrige",
+                "   a escala na mesma proporção. Resultado: a camada parece",
+                "   sempre do mesmo tamanho na tela, mesmo mudando o Z ou com a",
+                "   câmera se movendo. Ótimo para textos, ícones e marcadores",
+                "   que acompanham uma cena 3D.",
+                "",
+                "   Como usar:",
+                "   1. Ligue o 3D da camada e tenha uma câmera na comp.",
+                "   2. Cole esta expressão na Scale.",
+                "   3. A escala fica 100% quando a camada está à distância do",
+                "      Zoom da câmera.",
+                "",
+                "   Observações:",
+                "   - Sem câmera na comp, a escala original é mantida.",
+                "   - Use em camadas sem parent (a posição usada é a local).",
+                "   ============================================================ */",
+                "",
+                "try {",
+                "    // Busca a câmera ativa na composição",
+                "    cam = thisComp.activeCamera;",
+                "",
+                "    // Calcula a distância da câmera até o Ponto de Ancoragem da camada",
+                "    distance = length(sub(position, cam.position));",
+                "",
+                "    // Calcula a distância focal da câmera (ponto onde a escala é 100%)",
+                "    zoom = cam.zoom;",
+                "",
+                "    // Cria o fator de escala invertido",
+                "    scaleFactor = (distance / zoom) * 100;",
+                "",
+                "    // Aplica o fator nos eixos X, Y e Z",
+                "    [scaleFactor, scaleFactor, scaleFactor];",
+                "} catch(err) {",
+                "    // Caso não haja câmera na cena, mantém a escala original para não dar erro",
+                "    value;",
+                "}"
+            ].join("\n")
+        },
+        {
+            name: "Desacelerar até parar",
+            cat: "Movimento",
+            target: "Rotation (ou qualquer valor 1D)",
+            desc: "Movimento que começa rápido e vai freando até parar, como uma roda girando. Física de movimento uniformemente variado.",
+            needs: [],
+            code: [
+                "/* ============================================================",
+                "   DESACELERAR ATÉ PARAR",
+                "   Aplicar em: Rotation (ou qualquer propriedade de 1 valor:",
+                "               opacidade, X Position separado, Slider...)",
+                "   ------------------------------------------------------------",
+                "   O que faz:",
+                "   Simula algo que começa com velocidade vInicial e vai freando",
+                "   (desaceleracao por segundo) até parar, e depois fica parado.",
+                "   Ex.: uma roleta girando e parando.",
+                "",
+                "   Como usar:",
+                "   1. Cole na Rotation da camada.",
+                "   2. vInicial = velocidade no começo (graus por segundo).",
+                "   3. desaceleracao = quanto a velocidade cai por segundo.",
+                "      Ex.: 150 e 20 -> para em 7,5 s, depois de girar 562,5°.",
+                "",
+                "   Observações:",
+                "   - O valor substitui o da propriedade. Para somar à rotação",
+                "     que você já tem, troque a última linha por",
+                "     value + (vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);",
+                "   - Em Position (2D), separe as dimensões e use no X ou no Y.",
+                "   ============================================================ */",
+                "",
+                "var vInicial = 150;     // Velocidade no início",
+                "var desaceleracao = 20; // Quanto diminui por segundo",
+                "var tOriginal = Math.max(0, time); // Garante que o tempo não seja negativo",
+                "",
+                "// 1. Calcula em quanto tempo a velocidade chega a zero",
+                "var tempoParaParar = vInicial / desaceleracao;",
+                "",
+                "// 2. Garante que o tempo usado no cálculo nunca ultrapasse o ponto de parada",
+                "var t = Math.min(tOriginal, tempoParaParar);",
+                "",
+                "// 3. Aplica a fórmula de deslocamento (MUV)",
+                "(vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);"
+            ].join("\n")
+        }
+    ];
+
+    // Caminho de uma propriedade a partir da layer (índices), para reencontrar
+    // a propriedade depois de adicionar efeitos (o AE invalida as referências).
+    function propertyPath(prop) {
+        var path = [];
+        var p = prop;
+
+        while (p.parentProperty) {
+            path.unshift(p.propertyIndex);
+            p = p.parentProperty;
+        }
+
+        return {layer: p, path: path};
+    }
+
+    function resolvePropertyPath(ref) {
+        var p = ref.layer;
+        for (var i = 0; i < ref.path.length; i++) p = p.property(ref.path[i]);
+        return p;
+    }
+
+    // Garante que a layer tenha um Slider Control com esse nome.
+    function ensureSliderControl(layer, name) {
+        var parade = layer.property("ADBE Effect Parade");
+        if (!parade) return false;
+        if (parade.property(name)) return false;
+
+        var fx = parade.addProperty("ADBE Slider Control");
+        fx.name = name;
+        return true;
+    }
+
+    /*
+        Aba Expressões (versão compacta).
+        Dropdown de categoria + dropdown de expressão, uma linha com a
+        descrição, o código num campo menor e os botões em ícones.
+    */
+    function buildExpressionsTab(tab) {
+        tab.orientation = "column";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
+
+        var ALL = "Todas";
+        var MINE = "★ Minhas";
+
+        var favorites = loadExpressionFavorites();
+        var shown = [];     // entradas do dropdown, na mesma ordem (null = separador)
+        var current = null; // entrada carregada no editor
+        var busy = false;
+
+        // ----- escolher -----
+        var pickRow = tab.add("group");
+        pickRow.orientation = "row";
+        pickRow.alignChildren = ["fill", "center"];
+        pickRow.spacing = 4;
+
+        var ddCat = pickRow.add("dropdownlist", undefined, []);
+        ddCat.preferredSize.width = 92;
+        ddCat.helpTip = "Categoria";
+
+        var ddExpr = pickRow.add("dropdownlist", undefined, []);
+        uiFlex(ddExpr);
+        ddExpr.helpTip = "Escolha uma expressão para ver o tutorial e aplicar";
+
+        var infoText = uiFlex(uiLabel(tab, ""), 60);
+
+        // ----- código -----
+        var txtCode = tab.add("edittext", undefined, "", {
+            multiline: true,
+            scrolling: true,
+            wantReturn: true
+        });
+        txtCode.alignment = ["fill", "top"];
+        txtCode.preferredSize = [60, 96];
+
+        // ----- nome + ações em ícones -----
+        var nameRow = tab.add("group");
+        nameRow.orientation = "row";
+        nameRow.alignChildren = ["fill", "center"];
+        nameRow.spacing = 3;
+
+        var txtName = uiFlex(nameRow.add("edittext", undefined, ""));
+        txtName.helpTip = "Nome (para salvar nas suas favoritas)";
+
+        var btnNew = uiIconButton(nameRow, {icon: "plus", tip: "Nova: limpa o editor"});
+        var btnCapture = uiIconButton(nameRow, {icon: "capture", tip: "Capturar: copia a expressão da propriedade selecionada"});
+        var btnSave = uiIconButton(nameRow, {icon: "save", tip: "Salvar nas suas favoritas (★ Minhas)"});
+        var btnDelete = uiIconButton(nameRow, {icon: "trash", tip: "Excluir uma das suas favoritas"});
+
+        var applyRow = tab.add("group");
+        applyRow.orientation = "row";
+        applyRow.alignChildren = ["fill", "center"];
+        applyRow.spacing = 6;
+
+        var cbNeeds = uiFlex(applyRow.add("checkbox", undefined, "Criar controles"));
+        cbNeeds.value = loadSetting("exprCreateControls", "1") === "1";
+        cbNeeds.helpTip = "Criar Slider Control na camada se a expressão precisar";
+
+        var btnApply = uiIconButton(applyRow, {icon: "value", label: "APLICAR", primary: true, height: 24,
+            tip: "Aplicar nas propriedades selecionadas"});
+        uiFlex(btnApply, 60);
+
+        var status = addStatus(tab, "Escolha uma expressão. O tutorial vem no topo do código.");
+
+        // ----- lógica -----
+
+        function allEntries() {
+            var out = [];
+            var i;
+
+            for (i = 0; i < favorites.length; i++) {
+                out.push({kind: "user", name: favorites[i].name, cat: MINE, target: "—", desc: "", needs: [], code: favorites[i].code});
+            }
+
+            for (i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                var e = EXPRESSION_LIBRARY[i];
+                out.push({kind: "lib", name: e.name, cat: e.cat, target: e.target, desc: e.desc, needs: e.needs, code: e.code});
+            }
+
+            return out;
+        }
+
+        function refreshCategories() {
+            busy = true;
+            var keep = ddCat.selection ? ddCat.selection.text : loadSetting("exprCategory", ALL);
+            var names = [ALL, MINE];
+            var seen = {};
+
+            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                var c = EXPRESSION_LIBRARY[i].cat;
+                if (!seen["k" + c]) {
+                    seen["k" + c] = true;
+                    names.push(c);
+                }
+            }
+
+            ddCat.removeAll();
+            var pick = 0;
+
+            for (i = 0; i < names.length; i++) {
+                ddCat.add("item", names[i]);
+                if (names[i] === keep) pick = i;
+            }
+
+            ddCat.selection = pick;
+            busy = false;
+        }
+
+        // Dropdown de expressões: separador entre categorias quando "Todas".
+        function refreshList(keepName) {
+            var cat = ddCat.selection ? ddCat.selection.text : ALL;
+            var entries = allEntries();
+            var lastCat = null;
+            var pick = 0;
+
+            busy = true;
+            ddExpr.removeAll();
+            shown = [];
+
+            ddExpr.add("item", "— escolha uma expressão —");
+            shown.push(null);
+
+            for (var i = 0; i < entries.length; i++) {
+                var e = entries[i];
+                if (cat !== ALL && e.cat !== cat) continue;
+
+                if (cat === ALL && e.cat !== lastCat) {
+                    ddExpr.add("separator");
+                    shown.push(null);
+                    lastCat = e.cat;
+                }
+
+                ddExpr.add("item", (e.kind === "user" ? "★ " : "") + e.name);
+                shown.push(e);
+                if (keepName && keepName === e.name) pick = shown.length - 1;
+            }
+
+            ddExpr.selection = pick;
+            busy = false;
+        }
+
+        function describe(e) {
+            if (!e) {
+                infoText.text = "";
+                infoText.helpTip = "";
+                return;
+            }
+
+            if (e.kind === "user") {
+                infoText.text = "Expressão salva por você.";
+                infoText.helpTip = "";
+                return;
+            }
+
+            infoText.text = "Aplicar em: " + e.target + (e.needs.length ? "   ·   Precisa de: " + e.needs.join(", ") : "");
+            infoText.helpTip = e.desc + "\n" + infoText.text;
+        }
+
+        function loadSelected() {
+            if (busy || !ddExpr.selection) return;
+
+            var e = shown[ddExpr.selection.index];
+            if (!e) return;
+
+            current = e;
+            txtName.text = e.name;
+            txtCode.text = e.code;
+            describe(e);
+            status.text = e.desc || ("Favorita: " + e.name);
+        }
+
+        function applyCurrentExpression() {
+            var code = txtCode.text;
+
+            if (trimString(code) === "") {
+                alert("A expressão está vazia.");
+                return;
+            }
+
+            var props = collectSelectedExpressionProperties();
+
+            if (props.length === 0) {
+                alert("Selecione uma ou mais propriedades que aceitem expressão.");
+                return;
+            }
+
+            // Só cria controles se a expressão no editor ainda é a do atalho.
+            var needs = (current && current.kind === "lib" && current.code === code) ? current.needs : [];
+            var applied = 0;
+            var created = 0;
+            var errors = [];
+            var warnings = [];
+            var i;
+
+            saveSetting("exprCreateControls", cbNeeds.value ? "1" : "0");
+
+            app.beginUndoGroup("Mesmo Tools - Expressão" + (current ? " " + current.name : ""));
+
+            try {
+                if (needs.length && cbNeeds.value) {
+                    var refs = [];
+                    for (i = 0; i < props.length; i++) refs.push(propertyPath(props[i]));
+
+                    for (i = 0; i < refs.length; i++) {
+                        for (var n = 0; n < needs.length; n++) {
+                            try {
+                                if (ensureSliderControl(refs[i].layer, needs[n])) created++;
+                            } catch (eFx) {}
+                        }
+                    }
+
+                    // Adicionar efeitos invalida as referências: reencontra as propriedades.
+                    props = [];
+                    for (i = 0; i < refs.length; i++) {
+                        try { props.push(resolvePropertyPath(refs[i])); } catch (eRes) {}
+                    }
+                }
+
+                for (i = 0; i < props.length; i++) {
+                    var propName = "Propriedade";
+                    try { propName = props[i].name; } catch (nameErr) {}
+
+                    try {
+                        props[i].expression = code;
+                        applied++;
+
+                        var exprErr = "";
+                        try { exprErr = props[i].expressionError; } catch (eErr) {}
+                        if (exprErr) warnings.push(propName + ": " + exprErr);
+                    } catch (e) {
+                        errors.push(propName + ": " + e.toString().replace("Error: ", ""));
+                    }
+                }
+            } finally {
+                app.endUndoGroup();
+            }
+
+            status.text =
+                applied + " propriedade(s) atualizada(s)" +
+                (created ? " | " + created + " Slider Control criado(s)" : "") +
+                (errors.length ? " | " + errors.length + " erro(s)" : "") +
+                (warnings.length ? " | " + warnings.length + " com erro de expressão" : "") +
+                ".";
+
+            if (errors.length || warnings.length) {
+                var msg = "";
+                if (errors.length) {
+                    msg += "Não foi possível aplicar em:\n" + errors.join("\n");
+                }
+                if (warnings.length) {
+                    if (msg) msg += "\n\n";
+                    msg += "Aplicada, mas a expressão deu erro em:\n" + warnings.join("\n") +
+                        "\n\nConfira o tutorial no topo da expressão: às vezes falta " +
+                        "renomear uma camada ou criar um controle.";
+                }
+                alert(msg);
+            }
+        }
+
+        ddCat.onChange = function () {
+            if (busy || !ddCat.selection) return;
+            saveSetting("exprCategory", ddCat.selection.text);
+            refreshList(current ? current.name : null);
+        };
+
+        ddExpr.onChange = loadSelected;
+
+        btnNew.onClick = function () {
+            current = null;
+            ddExpr.selection = 0;
+            txtName.text = "";
+            txtCode.text = "";
+            describe(null);
+            status.text = "Nova expressão: escreva ou capture, dê um nome e salve.";
+        };
+
+        btnSave.onClick = function () {
+            var name = trimString(txtName.text);
+            var code = txtCode.text;
+
+            if (name === "") {
+                alert("Dê um nome para a expressão.");
+                return;
+            }
+
+            if (trimString(code) === "") {
+                alert("A expressão está vazia.");
+                return;
+            }
+
+            // Um atalho do Mesmo nunca é sobrescrito: vira uma cópia sua.
+            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
+                if (EXPRESSION_LIBRARY[i].name === name) {
+                    name += " (minha)";
+                    break;
+                }
+            }
+
+            var idx = findFavoriteIndex(favorites, name);
+
+            if (idx === -1) favorites.push({name: name, code: code});
+            else favorites[idx].code = code;
+
+            if (saveExpressionFavorites(favorites)) {
+                current = {kind: "user", name: name, cat: MINE, target: "—", desc: "", needs: [], code: code};
+                txtName.text = name;
+                refreshList(name);
+                describe(current);
+                status.text = "Salva em ★ Minhas: " + name;
+            }
+        };
+
+        btnDelete.onClick = function () {
+            if (current && current.kind === "lib") {
+                alert("Os atalhos do Mesmo não podem ser excluídos. Só as suas favoritas (★ Minhas).");
+                return;
+            }
+
+            var name = trimString(txtName.text);
+            if (name === "" && current) name = current.name;
+
+            var idx = findFavoriteIndex(favorites, name);
+
+            if (idx === -1) {
+                alert("Selecione uma das suas favoritas para excluir.");
+                return;
+            }
+
+            if (!confirm("Excluir a expressão \"" + name + "\"?")) return;
+
+            favorites.splice(idx, 1);
+
+            if (saveExpressionFavorites(favorites)) {
+                current = null;
+                txtName.text = "";
+                txtCode.text = "";
+                describe(null);
+                refreshList(null);
+                status.text = "Expressão excluída: " + name;
+            }
+        };
+
+        btnCapture.onClick = function () {
+            var props = collectSelectedExpressionProperties();
+
+            if (props.length === 0) {
+                alert("Selecione uma propriedade com expressão.");
+                return;
+            }
+
+            var captured = "";
+            try { captured = props[0].expression; } catch (e) {}
+
+            if (trimString(captured) === "") {
+                alert("A primeira propriedade selecionada não tem expressão.");
+                return;
+            }
+
+            current = null;
+            ddExpr.selection = 0;
+            txtCode.text = captured;
+            describe(null);
+
+            if (trimString(txtName.text) === "") {
+                try { txtName.text = props[0].name; } catch (nameErr) { txtName.text = "Expressão"; }
+            }
+
+            status.text = "Expressão capturada. Dê um nome e salve.";
+        };
+
+        btnApply.onClick = applyCurrentExpression;
+
+        refreshCategories();
+        refreshList(null);
     }
 
     // ================================================================
@@ -4914,6 +6250,12 @@
                     {label: "Ajustes", build: buildCompsTab, width: 300},
                     {label: "Duplicar", build: buildDuplicaTab, width: 300},
                     {label: "3D / Blur", build: build3DTab, width: 270}
+                ]
+            },
+            {
+                label: "Expressões", abbr: "Expr", tip: "Atalhos de expressões e suas favoritas",
+                tools: [
+                    {label: "Expressões", build: buildExpressionsTab, width: 340, noHeader: true}
                 ]
             }
         ];
