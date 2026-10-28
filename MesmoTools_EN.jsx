@@ -11,18 +11,16 @@
     - Animation = Curves + Explode (on the same screen)
     - Layers = Create + Anchor Point + Extract + Beats
     - Comps = Settings + Duplicate + 3D / Blur (on the same screen)
-    - Expressions: ready-made shortcuts + your favorite expressions
 
     Files saved in Folder.userData/MesmoTools/ (shared with the
     Portuguese version):
     - speed_curves.txt          (curves)
-    - expression_favorites.txt  (expressions)
 */
 
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.13";
+    var SCRIPT_VERSION = "2.14";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -240,7 +238,7 @@
 
         var b = parent.add("button", undefined, label);
         b.mesmoPrimary = !!opts.primary;
-        b.preferredSize.height = opts.height || (opts.primary ? 32 : 24);
+        b.preferredSize.height = opts.height || (opts.primary ? 24 : 20);
 
         if (opts.width) b.preferredSize.width = opts.width;
         if (opts.tip) b.helpTip = opts.tip;
@@ -282,6 +280,330 @@
         return b;
     }
 
+
+    // ---------------- ícones desenhados ----------------
+    // Cada ícone desenha dentro de um quadrado (x, y, s) com a cor c.
+
+    function iconPoly(g, pts, c, fill, w) {
+        g.newPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (var i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+        g.closePath();
+        if (fill) g.fillPath(uiBrush(g, c));
+        else g.strokePath(uiPen(g, c, w || 1.5));
+    }
+
+    function iconStarPts(cx, cy, r1, r2, n) {
+        var pts = [];
+        for (var i = 0; i < n * 2; i++) {
+            var r = i % 2 === 0 ? r1 : r2;
+            var a = -Math.PI / 2 + i * Math.PI / n;
+            pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+        }
+        return pts;
+    }
+
+    var ICONS = {
+        star: function (g, x, y, s, c) {
+            iconPoly(g, iconStarPts(x + s / 2, y + s / 2 + 0.5, s * 0.5, s * 0.22, 5), c, true);
+        },
+        save: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + 1, s - 2, s - 2);
+            g.strokePath(uiPen(g, c, 1.5));
+            g.newPath();
+            g.rectPath(x + s * 0.3, y + 1, s * 0.4, s * 0.3);
+            g.fillPath(uiBrush(g, c));
+            g.newPath();
+            g.rectPath(x + s * 0.25, y + s * 0.6, s * 0.5, s * 0.3);
+            g.fillPath(uiBrush(g, c));
+        },
+        trash: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + s * 0.18, s - 2, 1.6);
+            g.rectPath(x + s * 0.38, y, s * 0.24, s * 0.18);
+            g.fillPath(uiBrush(g, c));
+            iconPoly(g, [[x + s * 0.18, y + s * 0.3], [x + s * 0.82, y + s * 0.3], [x + s * 0.74, y + s], [x + s * 0.26, y + s]], c, false, 1.5);
+        },
+        // easy ease do After: ampulheta
+        classic: function (g, x, y, s, c) {
+            iconPoly(g, [[x + 1, y + 1], [x + s - 1, y + 1], [x + s / 2, y + s / 2]], c, true);
+            iconPoly(g, [[x + 1, y + s - 1], [x + s - 1, y + s - 1], [x + s / 2, y + s / 2]], c, true);
+        },
+        // curva de valor: S
+        value: function (g, x, y, s, c) {
+            uiStrokeCurve(g, {x1: 0.7, y1: 0, x2: 0.3, y2: 1}, x, y, s, s, [0, 1], c, 2);
+        },
+        // curva de velocidade: sino
+        speed: function (g, x, y, s, c) {
+            g.newPath();
+            for (var i = 0; i <= 16; i++) {
+                var t = i / 16;
+                var v = Math.exp(-Math.pow((t - 0.5) * 3.6, 2));
+                var px = x + t * s;
+                var py = y + s - v * s;
+                if (i === 0) g.moveTo(px, py);
+                else g.lineTo(px, py);
+            }
+            g.strokePath(uiPen(g, c, 2));
+        },
+        text: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + 1, s - 2, s * 0.2);
+            g.rectPath(x + s / 2 - s * 0.11, y + 1, s * 0.22, s - 2);
+            g.fillPath(uiBrush(g, c));
+        },
+        adjust: function (g, x, y, s, c) {
+            g.newPath();
+            g.ellipsePath(x + 1, y + 1, s - 2, s - 2);
+            g.strokePath(uiPen(g, c, 1.5));
+            var r = (s - 2) / 2;
+            var cx = x + s / 2;
+            var cy = y + s / 2;
+            var pts = [];
+            for (var i = 0; i <= 12; i++) {
+                var a = -Math.PI / 2 + Math.PI * i / 12;
+                pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+            }
+            iconPoly(g, pts, c, true);
+        },
+        nullLayer: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + 1, s - 2, s - 2);
+            g.strokePath(uiPen(g, c, 1.5));
+            g.newPath();
+            g.rectPath(x + s / 2 - 0.75, y + s * 0.3, 1.5, s * 0.4);
+            g.rectPath(x + s * 0.3, y + s / 2 - 0.75, s * 0.4, 1.5);
+            g.fillPath(uiBrush(g, c));
+        },
+        solid: function (g, x, y, s, c) {
+            uiRoundRect(g, x + 1, y + 1, s - 2, s - 2, 2);
+            g.fillPath(uiBrush(g, c));
+        },
+        shape: function (g, x, y, s, c) {
+            var pts = [];
+            for (var i = 0; i < 5; i++) {
+                var a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+                pts.push([x + s / 2 + s * 0.48 * Math.cos(a), y + s / 2 + 0.5 + s * 0.48 * Math.sin(a)]);
+            }
+            iconPoly(g, pts, c, true);
+        },
+        camera: function (g, x, y, s, c) {
+            uiRoundRect(g, x, y + s * 0.25, s * 0.66, s * 0.5, 1.5);
+            g.fillPath(uiBrush(g, c));
+            iconPoly(g, [[x + s * 0.7, y + s / 2], [x + s, y + s * 0.25], [x + s, y + s * 0.75]], c, true);
+        },
+        light: function (g, x, y, s, c) {
+            var cx = x + s / 2;
+            var cy = y + s / 2;
+            g.newPath();
+            g.ellipsePath(cx - s * 0.2, cy - s * 0.2, s * 0.4, s * 0.4);
+            g.fillPath(uiBrush(g, c));
+            g.newPath();
+            for (var i = 0; i < 8; i++) {
+                var a = i * Math.PI / 4;
+                g.moveTo(cx + Math.cos(a) * s * 0.32, cy + Math.sin(a) * s * 0.32);
+                g.lineTo(cx + Math.cos(a) * s * 0.5, cy + Math.sin(a) * s * 0.5);
+            }
+            g.strokePath(uiPen(g, c, 1.5));
+        },
+        cube: function (g, x, y, s, c) {
+            var cx = x + s / 2;
+            var t = y + 1;
+            var m = y + s * 0.3;
+            var b = y + s - 1;
+            var mid = y + s * 0.6;
+            g.newPath();
+            g.moveTo(cx, t); g.lineTo(x + s - 1, m); g.lineTo(x + s - 1, mid + s * 0.1);
+            g.lineTo(cx, b); g.lineTo(x + 1, mid + s * 0.1); g.lineTo(x + 1, m); g.closePath();
+            g.moveTo(x + 1, m); g.lineTo(cx, y + s * 0.55); g.lineTo(x + s - 1, m);
+            g.moveTo(cx, y + s * 0.55); g.lineTo(cx, b);
+            g.strokePath(uiPen(g, c, 1.5));
+        },
+        blur: function (g, x, y, s, c) {
+            g.newPath();
+            g.ellipsePath(x + s * 0.45, y + s * 0.2, s * 0.55, s * 0.6);
+            g.fillPath(uiBrush(g, c));
+            g.newPath();
+            g.rectPath(x, y + s * 0.3, s * 0.38, 1.6);
+            g.rectPath(x + s * 0.1, y + s * 0.5 - 0.8, s * 0.3, 1.6);
+            g.rectPath(x, y + s * 0.7 - 1.6, s * 0.38, 1.6);
+            g.fillPath(uiBrush(g, c));
+        },
+        explode: function (g, x, y, s, c) {
+            var cells = [[0, 0], [0.55, 0], [0, 0.55], [0.55, 0.55]];
+            for (var i = 0; i < cells.length; i++) {
+                g.newPath();
+                g.rectPath(x + cells[i][0] * s, y + cells[i][1] * s, s * 0.42, s * 0.42);
+                g.fillPath(uiBrush(g, c));
+            }
+        },
+        beats: function (g, x, y, s, c) {
+            var hs = [0.35, 0.8, 0.5, 1, 0.4];
+            for (var i = 0; i < hs.length; i++) {
+                g.newPath();
+                g.rectPath(x + i * s / 5 + 0.5, y + s * (1 - hs[i]), s / 5 - 1.5, s * hs[i]);
+                g.fillPath(uiBrush(g, c));
+            }
+        }
+    };
+
+    // Traço diagonal por cima: versão "desligar" do ícone.
+    function iconSlash(g, x, y, s, c, bg) {
+        g.newPath();
+        g.moveTo(x - 1, y + s + 1);
+        g.lineTo(x + s + 1, y - 1);
+        g.strokePath(uiPen(g, bg, 4));
+        g.newPath();
+        g.moveTo(x - 1, y + s + 1);
+        g.lineTo(x + s + 1, y - 1);
+        g.strokePath(uiPen(g, c, 1.5));
+    }
+
+    /*
+        Botão com ícone (e texto opcional ao lado).
+        opts: {icon, label, tip, width, height, primary, off}
+        off = desenha o ícone riscado (ação de desligar).
+    */
+    function uiIconButton(parent, opts) {
+        var b = parent.add("button", undefined, opts.label || "");
+        b.mesmoIcon = opts.icon;
+        b.mesmoOff = !!opts.off;
+        b.mesmoPrimary = !!opts.primary;
+        b.preferredSize = [opts.width || 24, opts.height || 22];
+        if (opts.tip) b.helpTip = opts.tip;
+
+        b.onDraw = function (state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var bg;
+            var fg;
+
+            if (this.mesmoPrimary) {
+                bg = state.leftButtonPressed ? THEME.accentDown : (state.mouseOver ? THEME.accentHover : THEME.accent);
+                fg = THEME.textOnAccent;
+            } else {
+                bg = state.leftButtonPressed ? THEME.surfaceDown : (state.mouseOver ? THEME.surfaceHover : THEME.surface);
+                fg = state.mouseOver ? THEME.text : THEME.textDim;
+            }
+
+            uiRoundRect(g, 0, 0, w, h, 4);
+            g.fillPath(uiBrush(g, bg));
+
+            var s = Math.min(h - 8, 14);
+            var font = uiFont(this.mesmoPrimary ? "BOLD" : "REGULAR", 11);
+            var label = this.text ? uiFit(g, this.text, font, w - s - 16) : "";
+            var lw = label ? uiMeasure(g, label, font)[0] + 5 : 0;
+            var ix = Math.round((w - s - lw) / 2);
+            var iy = Math.round((h - s) / 2);
+
+            if (ICONS[this.mesmoIcon]) ICONS[this.mesmoIcon](g, ix, iy, s, fg);
+            if (this.mesmoOff) iconSlash(g, ix, iy, s, fg, bg);
+            if (label) uiText(g, label, font, fg, ix + s + 5, 0, lw, h, "left");
+        };
+
+        return b;
+    }
+
+    /*
+        Controle segmentado (um ativo por vez), com ícone + texto.
+        items: [{value, label, icon, tip}]
+    */
+    function uiSegmented(parent, items, onSelect) {
+        var row = parent.add("group");
+        row.orientation = "row";
+        row.alignment = ["fill", "top"];
+        row.alignChildren = ["fill", "fill"];
+        row.spacing = 2;
+
+        var seg = {value: items[0].value, buttons: []};
+
+        for (var i = 0; i < items.length; i++) {
+            var b = row.add("button", undefined, items[i].label);
+            b.mesmoValue = items[i].value;
+            b.mesmoIcon = items[i].icon;
+            b.preferredSize = [30, 22];
+            b.helpTip = items[i].tip || items[i].label;
+
+            b.onDraw = function (state) {
+                var g = this.graphics;
+                var w = this.size[0];
+                var h = this.size[1];
+                var active = seg.value === this.mesmoValue;
+                var bg = active ? THEME.accent : (state.mouseOver ? THEME.surfaceHover : THEME.surface);
+                var fg = active ? THEME.textOnAccent : (state.mouseOver ? THEME.text : THEME.textDim);
+
+                uiRoundRect(g, 0, 0, w, h, 4);
+                g.fillPath(uiBrush(g, bg));
+
+                var s = 12;
+                var font = uiFont(active ? "BOLD" : "REGULAR", 11);
+                var label = uiFit(g, this.text, font, w - s - 14);
+                if (label.length < 3) label = ""; // estreito: só o ícone
+                var lw = label ? uiMeasure(g, label, font)[0] + 5 : 0;
+                var ix = Math.round((w - s - lw) / 2);
+
+                if (ICONS[this.mesmoIcon]) ICONS[this.mesmoIcon](g, ix, Math.round((h - s) / 2), s, fg);
+                if (label) uiText(g, label, font, fg, ix + s + 5, 0, lw, h, "left");
+            };
+
+            b.onClick = function () {
+                seg.select(this.mesmoValue);
+            };
+
+            seg.buttons.push(b);
+        }
+
+        seg.select = function (v, silent) {
+            seg.value = v;
+            uiRedraw(row);
+            if (!silent && onSelect) onSelect(v);
+        };
+
+        return seg;
+    }
+
+    // Mostra/esconde sem deixar o espaço reservado (o ScriptUI guarda o espaço).
+    function uiSetShown(el, shown) {
+        el.visible = shown;
+        el.maximumSize = shown ? [10000, 10000] : [10000, 0];
+    }
+
+    // As ferramentas pedem para o painel se reorganizar (ex.: trocar de modo).
+    var RELAYOUT_HOOK = null;
+    function requestRelayout() {
+        if (RELAYOUT_HOOK) {
+            try { RELAYOUT_HOOK(); } catch (e) {}
+        }
+    }
+
+    /*
+        Deixa tudo mais compacto: campos, dropdowns e checkboxes mais baixos
+        e grupos com espaçamento menor (só onde ficou o padrão do ScriptUI).
+    */
+    function uiCompact(container) {
+        var kids = container.children;
+        for (var i = 0; i < kids.length; i++) {
+            var k = kids[i];
+            try {
+                var t = k.type;
+                if (t === "dropdownlist") {
+                    k.preferredSize.height = 20;
+                } else if (t === "edittext" && !(k.properties && k.properties.multiline)) {
+                    k.preferredSize.height = 20;
+                } else if (t === "checkbox") {
+                    k.preferredSize.height = 18;
+                } else if ((t === "group" || t === "panel") && k.spacing === 10) {
+                    k.spacing = 4;
+                }
+            } catch (e) {}
+            try {
+                if (k.children && k.children.length) uiCompact(k);
+            } catch (e2) {}
+        }
+    }
+
     /*
         Seção com título em caixa alta, marcador laranja e linha fina.
         Devolve o grupo de conteúdo (use como se fosse um panel).
@@ -291,12 +613,12 @@
         wrap.orientation = "column";
         wrap.alignment = ["fill", "top"];
         wrap.alignChildren = ["fill", "top"];
-        wrap.spacing = 6;
-        wrap.margins = [0, 4, 0, 0];
+        wrap.spacing = 3;
+        wrap.margins = [0, 2, 0, 0];
 
         var head = wrap.add("group");
         head.alignment = ["fill", "top"];
-        head.preferredSize = [100, 16];
+        head.preferredSize = [100, 14];
         head.mesmoTitle = String(title).toUpperCase();
 
         head.onDraw = function () {
@@ -326,7 +648,7 @@
         body.orientation = "column";
         body.alignment = ["fill", "top"];
         body.alignChildren = ["fill", "top"];
-        body.spacing = 6;
+        body.spacing = 4;
         body.margins = [2, 0, 0, 0];
 
         return body;
@@ -375,7 +697,7 @@
     function uiHeader(parent) {
         var head = parent.add("group");
         head.alignment = ["fill", "top"];
-        head.preferredSize = [200, 30];
+        head.preferredSize = [200, 26];
 
         var logoCurve = {x1: 0.7, y1: 0, x2: 0.3, y2: 1};
 
@@ -423,7 +745,7 @@
             var b = row.add("button", undefined, items[i].label);
             b.mesmoShort = items[i].abbr || items[i].label;
             b.mesmoIndex = i;
-            b.preferredSize = [30, 28];
+            b.preferredSize = [30, 24];
             b.helpTip = items[i].tip || items[i].label;
 
             b.onDraw = function (state) {
@@ -484,7 +806,7 @@
     function uiToolHeader(parent, title) {
         var b = parent.add("button", undefined, title);
         b.alignment = ["fill", "top"];
-        b.preferredSize = [120, 26];
+        b.preferredSize = [120, 22];
         b.mesmoOpen = true;
         b.helpTip = "Click to collapse or expand";
 
@@ -516,7 +838,7 @@
             g.closePath();
             g.fillPath(uiBrush(g, THEME.accent));
 
-            var font = uiFont("BOLD", 12);
+            var font = uiFont("BOLD", 11);
             uiText(g, uiFit(g, this.text.toUpperCase(), font, w - 32), font, THEME.text, 24, 0, w - 28, h, "left");
         };
 
@@ -551,22 +873,6 @@
         e a duração real em segundos é totalFrames / fps.
         Formatar e ler usando a mesma base garante ida e volta sem perder frames.
     */
-    function formatTimecode(seconds, fps) {
-        if (seconds < 0) seconds = 0;
-
-        var nominalFPS = Math.max(1, Math.round(fps));
-        var totalFrames = Math.round(seconds * fps);
-
-        var frames = totalFrames % nominalFPS;
-        var totalSeconds = Math.floor(totalFrames / nominalFPS);
-        var secs = totalSeconds % 60;
-        var minsTotal = Math.floor(totalSeconds / 60);
-        var mins = minsTotal % 60;
-        var hours = Math.floor(minsTotal / 60);
-
-        return hours + ":" + pad2(mins) + ":" + pad2(secs) + ":" + pad2(frames);
-    }
-
     function parseTimecode(tc, fps) {
         tc = trimString(tc);
 
@@ -658,40 +964,17 @@
         return null;
     }
 
-    function rendererFriendlyName(internalName) {
-        var s = String(internalName).toLowerCase();
-
-        if (s === "adbe advanced 3d" || s.indexOf("classic") !== -1) {
-            return "Classic 3D";
-        }
-
-        if (
-            s === "adbe calder" ||
-            (s.indexOf("advanced") !== -1 && s !== "adbe advanced 3d")
-        ) {
-            return "Advanced 3D";
-        }
-
-        if (s === "adbe ernst" || s.indexOf("cinema") !== -1) {
-            return "Cinema 4D";
-        }
-
-        return null;
-    }
-
     function buildCompsTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
         var header = tab.add("group");
         header.orientation = "row";
         header.alignChildren = ["fill", "center"];
 
         var selectionText = uiFlex(header.add("statictext", undefined, "Select comps in the Project panel."));
-
-        var btnLoad = uiButton(header, "Read 1st Comp", {tip: "Loads the values of the first selected comp"});
 
         var resizePanel = uiSection(tab, "Resolution");
         resizePanel.orientation = "column";
@@ -856,58 +1139,6 @@
             }
         }
 
-        function setFPSUI(fps) {
-            var eps = 0.001;
-
-            if (Math.abs(fps - 23.976) < eps) {
-                ddFPS.selection = 0; txtCustomFPS.text = "23,976"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 24) < eps) {
-                ddFPS.selection = 1; txtCustomFPS.text = "24"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 29.97) < eps) {
-                ddFPS.selection = 2; txtCustomFPS.text = "29,97"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 30) < eps) {
-                ddFPS.selection = 3; txtCustomFPS.text = "30"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 59.94) < eps) {
-                ddFPS.selection = 4; txtCustomFPS.text = "59,94"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 60) < eps) {
-                ddFPS.selection = 5; txtCustomFPS.text = "60"; txtCustomFPS.enabled = false;
-            } else {
-                ddFPS.selection = 6;
-                txtCustomFPS.text = String(Math.round(fps * 100) / 100).replace(".", ",");
-                txtCustomFPS.enabled = true;
-            }
-        }
-
-        function setRendererUI(comp) {
-            var friendly = rendererFriendlyName(comp.renderer);
-            if (friendly === "Classic 3D") ddRenderer.selection = 0;
-            else if (friendly === "Advanced 3D") ddRenderer.selection = 1;
-            else if (friendly === "Cinema 4D") ddRenderer.selection = 2;
-        }
-
-        btnLoad.onClick = function () {
-            var comps = getSelectedComps();
-
-            if (comps.length === 0) {
-                alert("Select at least one composition in the Project panel.");
-                return;
-            }
-
-            var comp = comps[0];
-
-            suppressResizeSync = true;
-            txtW.text = String(comp.width);
-            txtH.text = String(comp.height);
-            suppressResizeSync = false;
-
-            updateLockedRatioFromFields();
-            setFPSUI(comp.frameRate);
-            txtDuration.text = formatTimecode(comp.duration, comp.frameRate);
-            setRendererUI(comp);
-
-            status.text = "Values loaded from: " + comp.name;
-            refreshSelectionText();
-        };
 
         btnApply.onClick = function () {
             var comps = getSelectedComps();
@@ -1056,8 +1287,8 @@
     function buildDuplicaTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
         var pnlNaming = uiSection(tab, "Copy names");
         pnlNaming.orientation = "column";
@@ -2104,19 +2335,21 @@
     function buildExplodeTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
-        var splitPanel = uiSection(tab, "Split");
+        // Duas colunas: o que dividir | opções
+        var cols = tab.add("group");
+        cols.orientation = "row";
+        cols.alignChildren = ["fill", "top"];
+        cols.spacing = 10;
+
+        var splitPanel = uiSection(cols, "Split");
         splitPanel.orientation = "column";
         splitPanel.alignChildren = ["fill", "top"];
+        splitPanel.parent.preferredSize.width = 60;
 
-        var rowMode = splitPanel.add("group");
-        rowMode.orientation = "row";
-
-        uiLabel(rowMode, "Split into:");
-
-        var ddMode = rowMode.add(
+        var ddMode = splitPanel.add(
             "dropdownlist",
             undefined,
             [
@@ -2128,45 +2361,41 @@
             ]
         );
         ddMode.selection = 0;
-        ddMode.alignment = ["fill", "center"];
+        uiFlex(ddMode);
+        ddMode.helpTip = "Split into";
 
         var customGroup = splitPanel.add("group");
         customGroup.orientation = "row";
+        customGroup.alignChildren = ["fill", "center"];
+        customGroup.spacing = 4;
 
-        var customLabel = customGroup.add("statictext", undefined, "Value:");
+        var customLabel = uiLabel(customGroup, "Value:");
 
         var txtCustom = customGroup.add("edittext", undefined, "");
         uiFlex(txtCustom);
-        txtCustom.alignment = ["fill", "center"];
 
-        var optionsPanel = uiSection(tab, "Options");
+        var optionsPanel = uiSection(cols, "Options");
         optionsPanel.orientation = "column";
-        optionsPanel.alignChildren = ["left", "top"];
+        optionsPanel.alignChildren = ["fill", "top"];
+        optionsPanel.parent.preferredSize.width = 60;
 
-        var cbDelete = optionsPanel.add(
-            "checkbox",
-            undefined,
-            "Delete original layer"
-        );
+        var cbDelete = uiFlex(optionsPanel.add("checkbox", undefined, "Delete original"));
+        cbDelete.helpTip = "Delete original layer";
 
-        var cbRTL = optionsPanel.add(
-            "checkbox",
-            undefined,
-            "RTL text (right to left)"
-        );
+        var cbRTL = uiFlex(optionsPanel.add("checkbox", undefined, "RTL text"));
+        cbRTL.helpTip = "RTL text (right to left)";
 
-        var orderRow = optionsPanel.add("group");
-        orderRow.orientation = "row";
-        uiLabel(orderRow, "Layer order:");
-
-        var ddOrder = orderRow.add(
+        var ddOrder = optionsPanel.add(
             "dropdownlist",
             undefined,
             ["Top to bottom", "Bottom to top"]
         );
         ddOrder.selection = 0;
+        uiFlex(ddOrder);
+        ddOrder.helpTip = "Layer order:";
 
-        var btnApply = uiButton(tab, "EXPLODE TEXT", {primary: true});
+        var btnApply = uiIconButton(tab, {icon: "explode", label: "EXPLODE TEXT", primary: true, height: 24});
+        btnApply.alignment = ["fill", "top"];
 
         var status = addStatus(tab, "Select one or more text layers.");
 
@@ -2239,53 +2468,55 @@
     function build3DTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
-        var info = uiFlex(uiLabel(tab, "Comps selected in the Project panel (or the open comp)."));
-        info.helpTip = "If nothing is selected in the Project panel, it acts on the open comp.";
+        // opções numa linha só
+        var optRow = tab.add("group");
+        optRow.orientation = "row";
+        optRow.alignChildren = ["fill", "center"];
+        optRow.spacing = 6;
 
-        var optionsPanel = uiSection(tab, "Options");
-        optionsPanel.orientation = "column";
-        optionsPanel.alignChildren = ["left", "top"];
-
-        var recursiveCheckbox = optionsPanel.add("checkbox", undefined, "Process precomps");
+        var recursiveCheckbox = uiFlex(optRow.add("checkbox", undefined, "Precomps"));
         recursiveCheckbox.value = loadSetting("layersRecursive", "1") === "1";
+        recursiveCheckbox.helpTip = "Process precomps";
 
-        var lockedCheckbox = optionsPanel.add("checkbox", undefined, "Process locked layers");
+        var lockedCheckbox = uiFlex(optRow.add("checkbox", undefined, "Locked"));
         lockedCheckbox.value = loadSetting("layersLocked", "1") === "1";
+        lockedCheckbox.helpTip = "Process locked layers";
 
-        // ----- 3D -----
-        var sec3D = uiSection(tab, "3D Layers");
-
-        var btns = sec3D.add("group");
-        btns.orientation = "row";
-        btns.alignChildren = ["fill", "center"];
-
-        var make3DButton = uiButton(btns, "ENABLE 3D", {primary: true});
-        var disable3DButton = uiButton(btns, "DISABLE 3D", {height: 32});
-
-        // ----- Motion Blur -----
-        var secMB = uiSection(tab, "Motion Blur");
-
-        var compMBCheckbox = secMB.add(
-            "checkbox",
-            undefined,
-            "Also switch the comp's Motion Blur"
-        );
-        uiFlex(compMBCheckbox);
+        var compMBCheckbox = uiFlex(optRow.add("checkbox", undefined, "Comp switch"));
         compMBCheckbox.value = loadSetting("mbCompSwitch", "1") === "1";
         compMBCheckbox.helpTip =
-            "Without the comp switch on, layer blur shows in neither preview nor render.";
+            "Also switch the comp's Motion Blur. Without the comp switch on, layer blur shows in neither preview nor render.";
 
-        var mbBtns = secMB.add("group");
-        mbBtns.orientation = "row";
-        mbBtns.alignChildren = ["fill", "center"];
+        // uma linha por recurso: nome + ligar + desligar (ícones)
+        function toggleRow(label, icon, tipOn, tipOff) {
+            var r = tab.add("group");
+            r.orientation = "row";
+            r.alignChildren = ["fill", "center"];
+            r.spacing = 4;
 
-        var mbOnButton = uiButton(mbBtns, "MOTION BLUR ON", {primary: true});
-        var mbOffButton = uiButton(mbBtns, "MOTION BLUR OFF", {height: 32});
+            var l = uiLabel(r, label);
+            l.preferredSize.width = 76;
+
+            var on = uiIconButton(r, {icon: icon, label: "On", primary: true, height: 24, tip: tipOn});
+            uiFlex(on, 40);
+            var off = uiIconButton(r, {icon: icon, label: "Off", off: true, height: 24, tip: tipOff});
+            uiFlex(off, 40);
+            return {on: on, off: off};
+        }
+
+        var row3D = toggleRow("3D Layers", "cube", "ENABLE 3D", "DISABLE 3D");
+        var make3DButton = row3D.on;
+        var disable3DButton = row3D.off;
+
+        var rowMB = toggleRow("Motion Blur", "blur", "MOTION BLUR ON", "MOTION BLUR OFF");
+        var mbOnButton = rowMB.on;
+        var mbOffButton = rowMB.off;
 
         var status = addStatus(tab, "Select comps in the Project panel.");
+        status.helpTip = "Acts on comps selected in the Project panel. If nothing is selected, acts on the open comp.";
 
         // Câmeras, luzes e camadas só de áudio não têm switch 3D.
         function canBe3D(layer) {
@@ -2420,1352 +2651,6 @@
         disable3DButton.onClick = function () { processSelection(MODES.threeD, false); };
         mbOnButton.onClick = function () { processSelection(MODES.motionBlur, true); };
         mbOffButton.onClick = function () { processSelection(MODES.motionBlur, false); };
-    }
-
-    function getExpressionStoreFile() {
-        var dir = new Folder(Folder.userData.fsName + "/MesmoTools");
-
-        if (!dir.exists) {
-            try {
-                dir.create();
-            } catch (e) {}
-        }
-
-        return new File(dir.fsName + "/expression_favorites.txt");
-    }
-
-    function loadExpressionFavorites() {
-        var out = [];
-        var f = getExpressionStoreFile();
-
-        if (!f.exists) return out;
-
-        try {
-            f.encoding = "UTF-8";
-
-            if (!f.open("r")) return out;
-
-            while (!f.eof) {
-                var line = f.readln();
-
-                if (line === "") continue;
-
-                var tabIndex = line.indexOf("\t");
-                if (tabIndex === -1) continue;
-
-                var nameEnc = line.substring(0, tabIndex);
-                var codeEnc = line.substring(tabIndex + 1);
-
-                try {
-                    out.push({
-                        name: decodeURIComponent(nameEnc),
-                        code: decodeURIComponent(codeEnc)
-                    });
-                } catch (decodeErr) {}
-            }
-
-            f.close();
-        } catch (e) {
-            try { f.close(); } catch (closeErr) {}
-        }
-
-        return out;
-    }
-
-    function saveExpressionFavorites(favorites) {
-        var f = getExpressionStoreFile();
-
-        try {
-            f.encoding = "UTF-8";
-
-            if (!f.open("w")) {
-                throw new Error("Could not open the favorites file.");
-            }
-
-            for (var i = 0; i < favorites.length; i++) {
-                f.writeln(
-                    encodeURIComponent(favorites[i].name) +
-                    "\t" +
-                    encodeURIComponent(favorites[i].code)
-                );
-            }
-
-            f.close();
-            return true;
-
-        } catch (e) {
-            try { f.close(); } catch (closeErr) {}
-            alert(
-                "Could not save favorites:\n" +
-                e.toString().replace("Error: ", "") + WRITE_HELP
-            );
-            return false;
-        }
-    }
-
-    function findFavoriteIndex(favorites, name) {
-        for (var i = 0; i < favorites.length; i++) {
-            if (favorites[i].name === name) return i;
-        }
-
-        return -1;
-    }
-
-    function collectSelectedExpressionProperties() {
-        var out = [];
-        var comp = app.project ? app.project.activeItem : null;
-
-        if (!isComp(comp)) return out;
-
-        function addProp(p) {
-            if (!p) return;
-
-            var canSet = false;
-
-            try {
-                canSet = p.canSetExpression === true;
-            } catch (e0) {}
-
-            if (!canSet) return;
-
-            for (var k = 0; k < out.length; k++) {
-                if (out[k] === p) return;
-            }
-
-            out.push(p);
-        }
-
-        try {
-            var compProps = comp.selectedProperties;
-
-            if (compProps && compProps.length) {
-                for (var i = 0; i < compProps.length; i++) {
-                    addProp(compProps[i]);
-                }
-            }
-        } catch (e1) {}
-
-        try {
-            var layers = comp.selectedLayers;
-
-            for (var j = 0; j < layers.length; j++) {
-                var props = layers[j].selectedProperties;
-
-                if (!props) continue;
-
-                for (var p = 0; p < props.length; p++) {
-                    addProp(props[p]);
-                }
-            }
-        } catch (e2) {}
-
-        return out;
-    }
-
-    // ================================================================
-    // MESMO EXPRESSION LIBRARY (English)
-    // Built from github.com/francismsmo/After-effects-Expressions.
-    // Each shortcut has a description, where to apply it and a tutorial comment.
-    // ================================================================
-
-    var EXPRESSION_LIBRARY = [
-        {
-            name: "Control Delay — Position",
-            cat: "Delay",
-            target: "Position",
-            desc: "The layer follows its parent's Position a few frames late. Use different delay values on each layer for a cascade effect.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   CONTROL DELAY — POSITION",
-                "   Apply to: Position of the layer that will follow the Control",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   The layer repeats the motion of its parent layer, just a few",
-                "   frames late. Gives that \"drag\" / follow-through cascade.",
-                "",
-                "   How to use:",
-                "   1. Create a control layer (e.g. a Null named \"Control\") and",
-                "      animate its Position.",
-                "   2. Parent the layers that will follow to the Control",
-                "      (Parent & Link pick whip).",
-                "   3. Paste this expression on the Position of each child layer.",
-                "   4. Adjust delayFrames below. Use different values on each",
-                "      layer (3, 6, 9...) for the cascade effect.",
-                "",
-                "   Notes:",
-                "   - Without a parent, the layer stays at its own value.",
-                "   - Works best with the Control unrotated and at 100% scale,",
-                "     because the delay is added in the parent's space.",
-                "   ============================================================ */",
-                "",
-                "var delayFrames = 3; // How many frames of delay you want",
-                "var delayTime = framesToTime(delayFrames);",
-                "",
-                "// The target (your Control object)",
-                "var target = parent;",
-                "",
-                "if (target != null) {",
-                "    // Where the Control was 'X' frames ago",
-                "    var delayedPos = target.transform.position.valueAtTime(time - delayTime);",
-                "",
-                "    // Where the Control is NOW",
-                "    var currentPos = target.transform.position.valueAtTime(time);",
-                "",
-                "    // Motion difference (delta)",
-                "    var delta = delayedPos - currentPos;",
-                "",
-                "    // Add the motion to the layer's own value (keeps the layout)",
-                "    value + delta;",
-                "} else {",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Control Delay — Rotation",
-            cat: "Delay",
-            target: "Rotation",
-            desc: "The layer repeats its parent's rotation a few frames late.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   CONTROL DELAY — ROTATION",
-                "   Apply to: Rotation of the layer that will follow the Control",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   The layer repeats the rotation of its parent layer, just a few",
-                "   frames late. Gives that \"drag\" / follow-through cascade.",
-                "",
-                "   How to use:",
-                "   1. Create a control layer (e.g. a Null named \"Control\") and",
-                "      animate its Rotation.",
-                "   2. Parent the layers that will follow to the Control",
-                "      (Parent & Link pick whip).",
-                "   3. Paste this expression on the Rotation of each child layer.",
-                "   4. Adjust delayFrames below. Use different values on each",
-                "      layer (3, 6, 9...) for the cascade effect.",
-                "",
-                "   Notes:",
-                "   - Without a parent, the layer stays at its own value.",
-                "   - On 3D layers, apply it to Z Rotation.",
-                "   ============================================================ */",
-                "",
-                "var delayFrames = 3; // How many frames of delay",
-                "var delayTime = framesToTime(delayFrames);",
-                "var target = parent;",
-                "",
-                "if (target != null) {",
-                "    // Parent's rotation difference",
-                "    var rotaPaiAtrasada = target.transform.rotation.valueAtTime(time - delayTime);",
-                "    var rotaPaiAgora = target.transform.rotation.valueAtTime(time);",
-                "    var delta = rotaPaiAtrasada - rotaPaiAgora;",
-                "",
-                "    // Layer's own rotation + the parent's delay",
-                "    value + delta;",
-                "} else {",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Control Delay — Scale",
-            cat: "Delay",
-            target: "Scale",
-            desc: "The layer repeats its parent's scale a few frames late. Great for cascading pops.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   CONTROL DELAY — SCALE",
-                "   Apply to: Scale of the layer that will follow the Control",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   The layer repeats the scale of its parent layer, just a few",
-                "   frames late. Gives that \"drag\" / follow-through cascade.",
-                "",
-                "   How to use:",
-                "   1. Create a control layer (e.g. a Null named \"Control\") and",
-                "      animate its Scale.",
-                "   2. Parent the layers that will follow to the Control",
-                "      (Parent & Link pick whip).",
-                "   3. Paste this expression on the Scale of each child layer.",
-                "   4. Adjust delayFrames below. Use different values on each",
-                "      layer (3, 6, 9...) for the cascade effect.",
-                "",
-                "   Notes:",
-                "   - Without a parent, the layer stays at its own value.",
-                "   - Works best with uniform scale on the Control (X = Y)",
-                "     and fast animations, like pops.",
-                "   ============================================================ */",
-                "",
-                "var delayFrames = 3; // How many frames of delay",
-                "var delayTime = framesToTime(delayFrames);",
-                "var target = parent;",
-                "",
-                "if (target != null) {",
-                "    // Parent's scale difference",
-                "    var escalaPaiAtrasada = target.transform.scale.valueAtTime(time - delayTime);",
-                "    var escalaPaiAgora = target.transform.scale.valueAtTime(time);",
-                "    var delta = escalaPaiAtrasada - escalaPaiAgora;",
-                "",
-                "    // Layer's own scale + the parent's delay",
-                "    value + delta;",
-                "} else {",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Growing wiggle",
-            cat: "Wiggle",
-            target: "Scale",
-            desc: "Wiggle that starts still and gets stronger over time, with no limit. Keeps the scale proportional.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   GROWING WIGGLE (no limit)",
-                "   Apply to: Scale",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Wiggle intensity starts at 0 and grows by growthRate every",
-                "   second. It uses the same value for X and Y, so the layer",
-                "   pulses without stretching.",
-                "",
-                "   How to use:",
-                "   1. Paste it on the layer's Scale.",
-                "   2. growthRate = how much the intensity grows per second.",
-                "   3. The 0.5 inside wiggle is the frequency (wiggles per second).",
-                "",
-                "   Notes:",
-                "   - Counts from the start of the comp (time = 0). If the layer",
-                "     starts later, replace time with (time - inPoint).",
-                "   - Want a ceiling? Use the \"Growing wiggle with limit\" shortcut.",
-                "   ============================================================ */",
-                "",
-                "// Rate defines how much the wiggle intensity increases per second",
-                "var growthRate = 10;",
-                "var dynamicAmount = time * growthRate;",
-                "",
-                "// Wiggle(frequency, amplitude)",
-                "var w = wiggle(0.5, dynamicAmount);",
-                "",
-                "// Same value for X and Y = keeps proportions",
-                "[w[0], w[0]]"
-            ].join("\n")
-        },
-        {
-            name: "Growing wiggle with limit",
-            cat: "Wiggle",
-            target: "Scale",
-            desc: "Like the growing wiggle, but it stops growing when it reaches the limit.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   GROWING WIGGLE WITH LIMIT",
-                "   Apply to: Scale",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Wiggle intensity grows by growthRate per second until it",
-                "   reaches limit, then stays constant. Keeps the scale",
-                "   proportional.",
-                "",
-                "   How to use:",
-                "   1. Paste it on the layer's Scale.",
-                "   2. growthRate = how much it grows per second.",
-                "   3. limit = maximum intensity.",
-                "      E.g. growthRate 10 and limit 30 -> reaches the max in 3 s.",
-                "",
-                "   Note: counts from the start of the comp. If the layer starts",
-                "   later, replace time with (time - inPoint).",
-                "   ============================================================ */",
-                "",
-                "var growthRate = 10; // Increases by 10 every second",
-                "var limit = 30;      // Maximum intensity",
-                "",
-                "// This will grow until it hits 30, then stay there",
-                "var dynamicAmount = Math.min(time * growthRate, limit);",
-                "",
-                "var w = wiggle(0.5, dynamicAmount);",
-                "",
-                "// Same value for X and Y = keeps proportions",
-                "[w[0], w[0]]"
-            ].join("\n")
-        },
-        {
-            name: "Fading wiggle",
-            cat: "Wiggle",
-            target: "Rotation",
-            desc: "Wiggle that starts strong and calms down until it stops. Good for something that sways and settles.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   FADING (DAMPED) WIGGLE",
-                "   Apply to: Rotation (works on any property)",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Starts at startAmount intensity and loses decayRate per",
-                "   second until it reaches 0, when the layer stops shaking.",
-                "",
-                "   How to use:",
-                "   1. Paste it on the layer's Rotation.",
-                "   2. startAmount = starting intensity (degrees, on Rotation).",
-                "   3. decayRate = how much it loses per second.",
-                "      E.g. 30 and 10 -> fully stops in 3 s.",
-                "",
-                "   Notes:",
-                "   - Also works on Position and Scale; wiggle returns the full",
-                "     property value.",
-                "   - Counts from the start of the comp. If the layer starts",
-                "     later, replace time with (time - inPoint).",
-                "   ============================================================ */",
-                "",
-                "var startAmount = 30; // Starting intensity",
-                "var decayRate = 10;   // How much it decreases per second",
-                "",
-                "// Never negative: stops at 0",
-                "var dynamicAmount = Math.max(startAmount - (time * decayRate), 0);",
-                "",
-                "// On Rotation, wiggle already returns the final value",
-                "wiggle(0.5, dynamicAmount);"
-            ].join("\n")
-        },
-        {
-            name: "Looping wiggle",
-            cat: "Wiggle",
-            target: "Any property",
-            desc: "Wiggle that repeats seamlessly every X seconds, with no jump at the loop point. Ideal for looping videos and GIFs.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   SEAMLESS LOOPING WIGGLE",
-                "   Apply to: any property (Position, Rotation, Scale...)",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Blends two identical wiggles offset by loopTime. The end of",
-                "   the cycle matches the start exactly, so it repeats with no",
-                "   \"jump\".",
-                "",
-                "   How to use:",
-                "   1. Paste it on the property.",
-                "   2. freq = how many times per second it moves.",
-                "   3. amp = size of the motion (px, degrees or %).",
-                "   4. loopTime = loop length in seconds. Use the comp duration",
-                "      (or a fraction of it) so the loop closes perfectly.",
-                "   ============================================================ */",
-                "",
-                "// --- SETTINGS ---",
-                "freq = 2;       // Frequency (how many times it moves per second)",
-                "amp = 50;       // Amplitude (distance/size of the variation)",
-                "loopTime = 10;  // Loop length in seconds",
-                "",
-                "// --- LOOP CALCULATION ---",
-                "t = time % loopTime;",
-                "w1 = wiggle(freq, amp, 1, 0.5, t);",
-                "w2 = wiggle(freq, amp, 1, 0.5, t - loopTime);",
-                "",
-                "// Blend between the first and second wiggle",
-                "linear(t, 0, loopTime, w1, w2);"
-            ].join("\n")
-        },
-        {
-            name: "Proportional scale wiggle",
-            cat: "Wiggle",
-            target: "Scale",
-            desc: "Wiggle on Scale without stretching: width and height change together.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   SCALE WIGGLE THAT KEEPS PROPORTIONS",
-                "   Apply to: Scale",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   A regular wiggle on Scale picks X and Y separately and the",
-                "   layer \"stretches\". Here X is used for both axes, so it only",
-                "   grows and shrinks evenly.",
-                "",
-                "   How to use:",
-                "   1. Paste it on Scale.",
-                "   2. wiggle(5, 30): 5 = frequency (times per second),",
-                "      30 = intensity (in %).",
-                "   ============================================================ */",
-                "",
-                "//This Wiggle on Scale keep the aspect ratio the same.",
-                "w = wiggle(5, 30);",
-                "",
-                "// Same value for X and Y",
-                "[w[0], w[0]]"
-            ].join("\n")
-        },
-        {
-            name: "Reveal text letter by letter",
-            cat: "Text",
-            target: "Range Selector > Start",
-            desc: "Reveals the text one letter per frame, typewriter style. The duration adapts to the text length.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   REVEAL TEXT LETTER BY LETTER",
-                "   Apply to: Start of the Range Selector of an Opacity animator",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Animates Start from 0 to 100 over as many frames as the text",
-                "   has letters: 1 letter per frame. If the text changes, the",
-                "   duration follows.",
-                "",
-                "   How to use:",
-                "   1. On the text layer: Animate > Opacity.",
-                "   2. In the new animator, set Opacity = 0%.",
-                "   3. Open Range Selector 1 and paste this expression on Start.",
-                "   4. The text appears from left to right.",
-                "",
-                "   Tips:",
-                "   - Slower: replace framesToTime(numChars) with",
-                "     framesToTime(numChars * 2) (2 frames per letter).",
-                "   - Starts at the beginning of the comp. To start when the",
-                "     layer comes in, replace time with (time - inPoint).",
-                "   ============================================================ */",
-                "",
-                "//Add an Opacity 0% animator and put this code on Start",
-                "",
-                "var numChars = text.sourceText.length;  // how many letters the text has",
-                "var finalTime = framesToTime(numChars); // 1 frame per letter",
-                "linear(time, 0, finalTime, 0, 100);"
-            ].join("\n")
-        },
-        {
-            name: "Chain APOIO text after PRINCIPAL",
-            cat: "Text",
-            target: "Range Selector > Start (APOIO layer)",
-            desc: "Makes the APOIO layer's animation start on its own as soon as the PRINCIPAL layer finishes animating (Start reaches 100).",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   CHAINED TEXT: APOIO STARTS WHEN PRINCIPAL FINISHES",
-                "   Apply to: Start of the Range Selector of the APOIO layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Watches the Start of the PRINCIPAL layer's Range Selector.",
-                "   When it reaches 100 (animation done), APOIO's Start goes from",
-                "   0 to 100 in 15 frames. If you change PRINCIPAL's timing,",
-                "   APOIO follows on its own.",
-                "",
-                "   How to use:",
-                "   1. Have two text layers named PRINCIPAL and APOIO, each with",
-                "      \"Animator 1\" > \"Range Selector 1\".",
-                "   2. Animate (or use an expression on) PRINCIPAL's Start up to 100.",
-                "   3. Paste this expression on Start of APOIO's Range Selector.",
-                "   4. Adjust the duration in framesToTime(15).",
-                "",
-                "   Notes:",
-                "   - The layer, animator and selector names must match exactly.",
-                "     If you rename them, change them here too.",
-                "   - The expression searches backwards frame by frame; in very",
-                "     long comps it may slow the preview down a bit.",
-                "   ============================================================ */",
-                "",
-                "// Apply to the Start of the APOIO layer's Range Selector",
-                "// The animation starts when the PRINCIPAL layer's Start reaches 100.",
-                "",
-                "var anterior = thisComp",
-                "    .layer(\"PRINCIPAL\")",
-                "    .text",
-                "    .animator(\"Animator 1\")",
-                "    .selector(\"Range Selector 1\")",
-                "    .start;",
-                "",
-                "var duracao = framesToTime(15); // APOIO animation length",
-                "",
-                "if (anterior < 100){",
-                "    0; // PRINCIPAL still animating: APOIO waits",
-                "}else{",
-                "    var inicio = time;",
-                "",
-                "    // Go back in time until the frame where PRINCIPAL reached 100",
-                "    for (var t = time; t >= 0; t -= thisComp.frameDuration){",
-                "        var v = thisComp",
-                "            .layer(\"PRINCIPAL\")",
-                "            .text",
-                "            .animator(\"Animator 1\")",
-                "            .selector(\"Range Selector 1\")",
-                "            .start",
-                "            .valueAtTime(t);",
-                "",
-                "        if (v < 100){",
-                "            inicio = t + thisComp.frameDuration;",
-                "            break;",
-                "        }",
-                "    }",
-                "",
-                "    // From there, animate from 0 to 100",
-                "    linear(time, inicio, inicio + duracao, 0, 100);",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "2-digit counter (00–99)",
-            cat: "Numbers",
-            target: "Source Text",
-            desc: "Shows a Slider's value as a whole number with a leading zero (00, 01... 10). For counters and scoreboards.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   2-DIGIT COUNTER (00, 01, 02... 10, 11...)",
-                "   Apply to: Source Text of a text layer",
-                "   Needs: a \"Slider Control\" effect on the same layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Rounds the Slider value and adds a zero in front of numbers",
-                "   below 10.",
-                "",
-                "   How to use:",
-                "   1. On the text layer, add Effect > Expression Controls",
-                "      > Slider Control (the panel creates it if missing).",
-                "   2. Paste this expression on Source Text.",
-                "   3. Animate the Slider (e.g. from 0 to 10) and the text counts.",
-                "   ============================================================ */",
-                "",
-                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
-                "",
-                "// Below 10 gets a zero in front",
-                "if (s < 10) { \"0\" + s } else { s.toString() }"
-            ].join("\n")
-        },
-        {
-            name: "6-digit counter (000.000)",
-            cat: "Numbers",
-            target: "Source Text",
-            desc: "Shows a Slider's value with 6 digits and a thousands dot (000.000). For view counters, amounts, etc.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   6-DIGIT COUNTER (000.000)",
-                "   Apply to: Source Text of a text layer",
-                "   Needs: a \"Slider Control\" effect on the same layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Rounds the Slider, pads it with zeros to 6 digits and puts a",
-                "   dot in the middle. E.g. 1234 -> \"001.234\".",
-                "",
-                "   How to use:",
-                "   1. Add a Slider Control to the text layer (the panel creates",
-                "      it if missing).",
-                "   2. Paste this expression on Source Text.",
-                "   3. Animate the Slider from 0 to the final value (max 999999).",
-                "",
-                "   Note: negative numbers and values above 999.999 don't fit",
-                "   the format.",
-                "   ============================================================ */",
-                "",
-                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
-                "",
-                "// Pad with zeros on the left and keep the last 6 digits",
-                "txt = (\"000000\" + s).slice(-6);",
-                "",
-                "// Dot separating the thousands",
-                "txt.slice(0, 3) + \".\" + txt.slice(3);"
-            ].join("\n")
-        },
-        {
-            name: "Camera timecode (00:00:SS:FF)",
-            cat: "Numbers",
-            target: "Source Text",
-            desc: "Fakes a camera timecode from a Slider that counts frames (30 fps): shows 00:00:seconds:frames.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   CAMERA TIMECODE (00:00:SS:FF at 30 fps)",
-                "   Apply to: Source Text of a text layer",
-                "   Needs: a \"Slider Control\" effect on the same layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   The Slider is a FRAME counter. The expression divides by 30",
-                "   and shows seconds and frames in camera timecode format:",
-                "   fixed \"00:00:\" + SS:FF.",
-                "   (In the code, \"minutos\" holds the seconds and \"segundos\"",
-                "   holds the frames.)",
-                "",
-                "   How to use:",
-                "   1. Add a Slider Control to the text layer (the panel creates",
-                "      it if missing).",
-                "   2. Paste this expression on Source Text.",
-                "   3. Animate the Slider. E.g. 0 -> 300 over 10 s makes the",
-                "      timecode run in real time at 30 fps.",
-                "      Shortcut: on the Slider, use the expression  time * 30",
-                "",
-                "   Tip: for another fps, replace both 30s with the fps you want.",
-                "   ============================================================ */",
-                "",
-                "v = Math.floor(effect(\"Slider Control\")(\"Slider\")); // total frames",
-                "",
-                "minutos = Math.floor(v / 30); // seconds (30 frames = 1 s)",
-                "segundos = v % 30;            // leftover frames",
-                "",
-                "minTxt = (minutos < 10) ? (\"0\" + minutos) : minutos.toString();",
-                "segTxt = (segundos < 10) ? (\"0\" + segundos) : segundos.toString();",
-                "",
-                "// fixed text + timecode",
-                "\"00:00:\" + minTxt + \":\" + segTxt;"
-            ].join("\n")
-        },
-        {
-            name: "Reactive box — text Anchor Point",
-            cat: "Layout",
-            target: "Anchor Point (text layer)",
-            desc: "Reactive box part 1: centers the text's Anchor Point, so text and box line up by the center.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   REACTIVE BOX — PART 1: TEXT ANCHOR POINT",
-                "   Apply to: Anchor Point of the TEXT layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Puts the Anchor Point exactly at the center of the text,",
-                "   whatever its size. The text grows to both sides and stays",
-                "   aligned with the box.",
-                "",
-                "   How to use (together with Part 2):",
-                "   1. Replace \"nome da camada\" with your text layer's name",
-                "      (it can be the layer itself: thisLayer also works).",
-                "   2. Paste it on the text's Anchor Point.",
-                "   3. On the box (shape), use the \"Reactive box — box Size\"",
-                "      shortcut.",
-                "   4. Align text and box at the same position (or parent them).",
-                "   ============================================================ */",
-                "",
-                "///Text layer - Anchor Point:",
-                "",
-                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
-                "",
-                "Height = a.height;",
-                "Width = a.width;",
-                "Left = a.left;",
-                "Top = a.top;",
-                "",
-                "// Center of the text rectangle",
-                "x = Left + Width / 2;",
-                "y = Top + Height / 2;",
-                "",
-                "[x, y]"
-            ].join("\n")
-        },
-        {
-            name: "Reactive box — box Size",
-            cat: "Layout",
-            target: "Rectangle Path > Size (box shape)",
-            desc: "Reactive box part 2: the box (shape) resizes on its own to fit the text, with padding controlled by a Slider.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   REACTIVE BOX — PART 2: BOX SIZE",
-                "   Apply to: Size of the Rectangle Path on the SHAPE (box) layer",
-                "   Needs: a \"Slider Control\" effect on the box layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Reads the text size and makes the rectangle that size plus",
-                "   padding (the Slider value). Change the text, the box follows.",
-                "",
-                "   How to use:",
-                "   1. Create a rectangle (shape layer > Rectangle).",
-                "   2. Add a Slider Control to the box layer (the panel creates",
-                "      it if missing). It is the padding in px.",
-                "   3. Replace \"nome da camada\" with the text layer's name.",
-                "   4. Paste it on the Rectangle Path's Size.",
-                "   5. Use Part 1 on the text's Anchor Point to center it.",
-                "",
-                "   Tip: the padding is added to the total; with Slider 40 you get",
-                "   20 px on each side.",
-                "   ============================================================ */",
-                "",
-                "///Box layer - Size within the parameters:",
-                "",
-                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
-                "",
-                "Height = a.height;",
-                "Width = a.width;",
-                "",
-                "p = effect(\"Slider Control\")(\"Slider\"); // padding",
-                "x = Width + p;",
-                "y = Height + p;",
-                "",
-                "[x, y]"
-            ].join("\n")
-        },
-        {
-            name: "Size from sliders (Width/Height)",
-            cat: "Layout",
-            target: "Rectangle Path > Size",
-            desc: "Controls a rectangle's size with two sliders on a CONTROLES layer. Good for keeping several controls in one place.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   SIZE FROM SLIDERS",
-                "   Apply to: Size of the Rectangle Path (or any [x, y] value)",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Takes width and height from two Sliders on a control layer.",
-                "   Several boxes can use the same sliders and change together.",
-                "",
-                "   How to use:",
-                "   1. Create a Null named CONTROLES.",
-                "   2. Add two Slider Controls to it and rename them",
-                "      \"Largura\" (width) and \"Altura\" (height).",
-                "   3. Paste this expression on the box's Rectangle Path Size.",
-                "   4. Move the sliders on CONTROLES.",
-                "   ============================================================ */",
-                "",
-                "w = thisComp.layer(\"CONTROLES\").effect(\"Largura\")(\"Slider\");",
-                "h = thisComp.layer(\"CONTROLES\").effect(\"Altura\")(\"Slider\");",
-                "",
-                "[w, h]"
-            ].join("\n")
-        },
-        {
-            name: "Constant size to camera (Scale x Z)",
-            cat: "3D",
-            target: "Scale (3D layer)",
-            desc: "Keeps the layer's apparent size the same even when it moves closer to or farther from the camera.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   CONSTANT SIZE TO CAMERA (Scale x Position Z)",
-                "   Apply to: Scale of a 3D layer",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Measures the distance between the layer and the active",
-                "   camera and corrects the scale by the same ratio. Result: the",
-                "   layer always looks the same size on screen, even when Z",
-                "   changes or the camera moves. Great for text, icons and",
-                "   markers that follow a 3D scene.",
-                "",
-                "   How to use:",
-                "   1. Turn on the layer's 3D and have a camera in the comp.",
-                "   2. Paste this expression on Scale.",
-                "   3. Scale is 100% when the layer is at the camera's Zoom",
-                "      distance.",
-                "",
-                "   Notes:",
-                "   - With no camera in the comp, the original scale is kept.",
-                "   - Use it on layers without a parent (it uses the local",
-                "     position).",
-                "   ============================================================ */",
-                "",
-                "try {",
-                "    // Get the comp's active camera",
-                "    cam = thisComp.activeCamera;",
-                "",
-                "    // Distance from the camera to the layer's Anchor Point",
-                "    distance = length(sub(position, cam.position));",
-                "",
-                "    // Camera focal distance (where scale is 100%)",
-                "    zoom = cam.zoom;",
-                "",
-                "    // Inverse scale factor",
-                "    scaleFactor = (distance / zoom) * 100;",
-                "",
-                "    // Apply the factor on X, Y and Z",
-                "    [scaleFactor, scaleFactor, scaleFactor];",
-                "} catch(err) {",
-                "    // No camera in the scene: keep the original scale to avoid errors",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Decelerate to a stop",
-            cat: "Motion",
-            target: "Rotation (or any 1D value)",
-            desc: "Motion that starts fast and brakes until it stops, like a spinning wheel. Uniformly decelerated motion physics.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   DECELERATE TO A STOP",
-                "   Apply to: Rotation (or any 1-value property: opacity,",
-                "             separated X Position, Slider...)",
-                "   ------------------------------------------------------------",
-                "   What it does:",
-                "   Simulates something that starts at speed vInicial and brakes",
-                "   (desaceleracao per second) until it stops, then stays still.",
-                "   E.g. a prize wheel spinning and stopping.",
-                "",
-                "   How to use:",
-                "   1. Paste it on the layer's Rotation.",
-                "   2. vInicial = starting speed (degrees per second).",
-                "   3. desaceleracao = how much the speed drops per second.",
-                "      E.g. 150 and 20 -> stops at 7.5 s, after turning 562.5°.",
-                "",
-                "   Notes:",
-                "   - The value replaces the property's. To add it to the",
-                "     rotation you already have, change the last line to",
-                "     value + (vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);",
-                "   - On Position (2D), separate dimensions and use it on X or Y.",
-                "   ============================================================ */",
-                "",
-                "var vInicial = 150;     // Starting speed",
-                "var desaceleracao = 20; // How much it decreases per second",
-                "var tOriginal = Math.max(0, time); // Makes sure time is never negative",
-                "",
-                "// 1. How long until the speed reaches zero",
-                "var tempoParaParar = vInicial / desaceleracao;",
-                "",
-                "// 2. Never let the time used go past the stopping point",
-                "var t = Math.min(tOriginal, tempoParaParar);",
-                "",
-                "// 3. Displacement formula (uniformly varied motion)",
-                "(vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);"
-            ].join("\n")
-        }
-    ];
-
-    // Caminho de uma propriedade a partir da layer (índices), para reencontrar
-    // a propriedade depois de adicionar efeitos (o AE invalida as referências).
-    function propertyPath(prop) {
-        var path = [];
-        var p = prop;
-
-        while (p.parentProperty) {
-            path.unshift(p.propertyIndex);
-            p = p.parentProperty;
-        }
-
-        return {layer: p, path: path};
-    }
-
-    function resolvePropertyPath(ref) {
-        var p = ref.layer;
-        for (var i = 0; i < ref.path.length; i++) p = p.property(ref.path[i]);
-        return p;
-    }
-
-    // Garante que a layer tenha um Slider Control com esse nome.
-    function ensureSliderControl(layer, name) {
-        var parade = layer.property("ADBE Effect Parade");
-        if (!parade) return false;
-        if (parade.property(name)) return false;
-
-        var fx = parade.addProperty("ADBE Slider Control");
-        fx.name = name;
-        return true;
-    }
-
-    function buildExpressionsTab(tab) {
-        tab.orientation = "column";
-        tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
-
-        var ALL = "All";
-        var MINE = "★ Mine";
-
-        var favorites = loadExpressionFavorites();
-        var shown = [];     // entradas visíveis na lista, na mesma ordem
-        var current = null; // entrada carregada no editor
-        var busy = false;
-
-        // ----- Lista -----
-        var libSec = uiSection(tab, "Shortcuts and favorites");
-
-        var filterRow = libSec.add("group");
-        filterRow.orientation = "row";
-        filterRow.alignChildren = ["fill", "center"];
-
-        var ddCat = filterRow.add("dropdownlist", undefined, []);
-        ddCat.preferredSize.width = 120;
-
-        var txtSearch = filterRow.add("edittext", undefined, "");
-        txtSearch.alignment = ["fill", "center"];
-        txtSearch.helpTip = "Search by name or description";
-
-        var list = libSec.add("listbox", undefined, [], {
-            multiselect: false,
-            numberOfColumns: 2,
-            showHeaders: true,
-            columnTitles: ["Expression", "Apply to"],
-            columnWidths: [230, 150]
-        });
-        list.alignment = ["fill", "fill"];
-        list.preferredSize.height = 170;
-
-        var infoText = libSec.add("statictext", undefined, "", {multiline: true});
-        infoText.alignment = ["fill", "top"];
-        infoText.preferredSize.height = 58;
-        uiColorText(infoText, THEME.textDim);
-
-        // ----- Editor -----
-        var edSec = uiSection(tab, "Expression");
-
-        var nameRow = edSec.add("group");
-        nameRow.orientation = "row";
-        nameRow.alignChildren = ["fill", "center"];
-
-        uiLabel(nameRow, "Name:");
-        var txtName = nameRow.add("edittext", undefined, "");
-        txtName.alignment = ["fill", "center"];
-        txtName.characters = 24;
-
-        var txtCode = edSec.add("edittext", undefined, "", {
-            multiline: true,
-            scrolling: true,
-            wantReturn: true
-        });
-        txtCode.alignment = ["fill", "fill"];
-        txtCode.preferredSize.height = 200;
-
-        var manageRow = edSec.add("group");
-        manageRow.orientation = "row";
-        manageRow.alignChildren = ["fill", "center"];
-        manageRow.spacing = 4;
-
-        var btnNew = uiButton(manageRow, "New", {tip: "Clears the editor"});
-        var btnSave = uiButton(manageRow, "Save", {tip: "Saves to your favorites (★ Mine)"});
-        var btnDelete = uiButton(manageRow, "Delete", {tip: "Deletes one of your favorites"});
-        var btnCapture = uiButton(manageRow, "Capture", {tip: "Copies the expression from the selected property"});
-
-        // ----- Aplicar -----
-        var applySec = uiSection(tab, "Apply");
-
-        var cbNeeds = applySec.add("checkbox", undefined, "Create the Slider Control on the layer if the expression needs it");
-        cbNeeds.value = loadSetting("exprCreateControls", "1") === "1";
-
-        var btnApply = uiButton(applySec, "APPLY TO SELECTED PROPERTIES", {primary: true});
-
-        var status = addStatus(tab, "Click a shortcut to see its tutorial. Double-click applies it.");
-
-        // ----- lógica -----
-
-        function allEntries() {
-            var out = [];
-            var i;
-
-            for (i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                var e = EXPRESSION_LIBRARY[i];
-                out.push({
-                    kind: "lib",
-                    name: e.name,
-                    cat: e.cat,
-                    target: e.target,
-                    desc: e.desc,
-                    needs: e.needs,
-                    code: e.code
-                });
-            }
-
-            for (i = 0; i < favorites.length; i++) {
-                out.push({
-                    kind: "user",
-                    name: favorites[i].name,
-                    cat: MINE,
-                    target: "—",
-                    desc: "",
-                    needs: [],
-                    code: favorites[i].code
-                });
-            }
-
-            return out;
-        }
-
-        function refreshCategories() {
-            busy = true;
-            var keep = ddCat.selection ? ddCat.selection.text : loadSetting("exprCategory", ALL);
-            var names = [ALL, MINE];
-            var seen = {};
-
-            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                var c = EXPRESSION_LIBRARY[i].cat;
-                if (!seen["k" + c]) {
-                    seen["k" + c] = true;
-                    names.push(c);
-                }
-            }
-
-            ddCat.removeAll();
-            var pick = 0;
-
-            for (i = 0; i < names.length; i++) {
-                ddCat.add("item", names[i]);
-                if (names[i] === keep) pick = i;
-            }
-
-            ddCat.selection = pick;
-            busy = false;
-        }
-
-        function refreshList(keepName) {
-            var cat = ddCat.selection ? ddCat.selection.text : ALL;
-            var q = trimString(txtSearch.text).toLowerCase();
-            var entries = allEntries();
-
-            busy = true;
-            list.removeAll();
-            shown = [];
-
-            for (var i = 0; i < entries.length; i++) {
-                var e = entries[i];
-
-                if (cat !== ALL && e.cat !== cat) continue;
-
-                if (
-                    q !== "" &&
-                    e.name.toLowerCase().indexOf(q) === -1 &&
-                    e.desc.toLowerCase().indexOf(q) === -1
-                ) {
-                    continue;
-                }
-
-                var item = list.add("item", (e.kind === "user" ? "★ " : "") + e.name);
-                try { item.subItems[0].text = e.target; } catch (eSub) {}
-
-                shown.push(e);
-
-                if (keepName && keepName === e.name) list.selection = item;
-            }
-
-            busy = false;
-        }
-
-        function describe(e) {
-            if (!e) {
-                infoText.text = "";
-                return;
-            }
-
-            if (e.kind === "user") {
-                infoText.text = "Expression saved by you.";
-                return;
-            }
-
-            infoText.text =
-                e.desc + "\n" +
-                "Apply to: " + e.target +
-                (e.needs.length ? "   ·   Needs: " + e.needs.join(", ") : "");
-        }
-
-        function loadSelected() {
-            if (busy || !list.selection) return;
-
-            var e = shown[list.selection.index];
-            if (!e) return;
-
-            current = e;
-            txtName.text = e.name;
-            txtCode.text = e.code;
-            describe(e);
-            status.text = (e.kind === "lib" ? "Shortcut: " : "Favorite: ") + e.name;
-        }
-
-        function applyCurrentExpression() {
-            var code = txtCode.text;
-
-            if (trimString(code) === "") {
-                alert("The expression is empty.");
-                return;
-            }
-
-            var props = collectSelectedExpressionProperties();
-
-            if (props.length === 0) {
-                alert("Select one or more properties that accept expressions.");
-                return;
-            }
-
-            // Só cria controles se a expressão no editor ainda é a do atalho.
-            var needs = (current && current.kind === "lib" && current.code === code) ? current.needs : [];
-            var applied = 0;
-            var created = 0;
-            var errors = [];
-            var warnings = [];
-            var i;
-
-            saveSetting("exprCreateControls", cbNeeds.value ? "1" : "0");
-
-            app.beginUndoGroup("Mesmo Tools - Expression" + (current ? " " + current.name : ""));
-
-            try {
-                if (needs.length && cbNeeds.value) {
-                    var refs = [];
-                    for (i = 0; i < props.length; i++) refs.push(propertyPath(props[i]));
-
-                    for (i = 0; i < refs.length; i++) {
-                        for (var n = 0; n < needs.length; n++) {
-                            try {
-                                if (ensureSliderControl(refs[i].layer, needs[n])) created++;
-                            } catch (eFx) {}
-                        }
-                    }
-
-                    // Adicionar efeitos invalida as referências: reencontra as propriedades.
-                    props = [];
-                    for (i = 0; i < refs.length; i++) {
-                        try { props.push(resolvePropertyPath(refs[i])); } catch (eRes) {}
-                    }
-                }
-
-                for (i = 0; i < props.length; i++) {
-                    var propName = "Property";
-                    try { propName = props[i].name; } catch (nameErr) {}
-
-                    try {
-                        props[i].expression = code;
-                        applied++;
-
-                        // O AE aceita a expressão mesmo com erro; avisa se ela quebrou.
-                        var exprErr = "";
-                        try { exprErr = props[i].expressionError; } catch (eErr) {}
-                        if (exprErr) warnings.push(propName + ": " + exprErr);
-                    } catch (e) {
-                        errors.push(propName + ": " + e.toString().replace("Error: ", ""));
-                    }
-                }
-            } finally {
-                app.endUndoGroup();
-            }
-
-            status.text =
-                applied + " propert(ies) updated" +
-                (created ? " | " + created + " Slider Control(s) created" : "") +
-                (errors.length ? " | " + errors.length + " error(s)" : "") +
-                (warnings.length ? " | " + warnings.length + " with expression errors" : "") +
-                ".";
-
-            if (errors.length || warnings.length) {
-                var msg = "";
-                if (errors.length) {
-                    msg += "Could not apply to:\n" + errors.join("\n");
-                }
-                if (warnings.length) {
-                    if (msg) msg += "\n\n";
-                    msg += "Applied, but the expression has an error in:\n" + warnings.join("\n") +
-                        "\n\nCheck the tutorial at the top of the expression: you may need to " +
-                        "rename a layer or create a control.";
-                }
-                alert(msg);
-            }
-        }
-
-        ddCat.onChange = function () {
-            if (busy || !ddCat.selection) return;
-            saveSetting("exprCategory", ddCat.selection.text);
-            refreshList(current ? current.name : null);
-        };
-
-        txtSearch.onChanging = function () {
-            refreshList(current ? current.name : null);
-        };
-
-        list.onChange = loadSelected;
-
-        list.onDoubleClick = function () {
-            loadSelected();
-            applyCurrentExpression();
-        };
-
-        btnNew.onClick = function () {
-            current = null;
-            list.selection = null;
-            txtName.text = "";
-            txtCode.text = "";
-            describe(null);
-            status.text = "New expression: write or capture it, name it and save.";
-        };
-
-        btnSave.onClick = function () {
-            var name = trimString(txtName.text);
-            var code = txtCode.text;
-
-            if (name === "") {
-                alert("Give the expression a name.");
-                return;
-            }
-
-            if (trimString(code) === "") {
-                alert("The expression is empty.");
-                return;
-            }
-
-            // Um atalho do Mesmo nunca é sobrescrito: vira uma cópia sua.
-            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                if (EXPRESSION_LIBRARY[i].name === name) {
-                    name += " (mine)";
-                    break;
-                }
-            }
-
-            var idx = findFavoriteIndex(favorites, name);
-
-            if (idx === -1) favorites.push({name: name, code: code});
-            else favorites[idx].code = code;
-
-            if (saveExpressionFavorites(favorites)) {
-                current = {kind: "user", name: name, cat: MINE, target: "—", desc: "", needs: [], code: code};
-                txtName.text = name;
-                refreshList(name);
-                describe(current);
-                status.text = "Saved to ★ Mine: " + name;
-            }
-        };
-
-        btnDelete.onClick = function () {
-            if (current && current.kind === "lib") {
-                alert("Mesmo shortcuts can't be deleted. Only your favorites (★ Mine).");
-                return;
-            }
-
-            var name = trimString(txtName.text);
-            if (name === "" && current) name = current.name;
-
-            var idx = findFavoriteIndex(favorites, name);
-
-            if (idx === -1) {
-                alert("Select one of your favorites to delete.");
-                return;
-            }
-
-            if (!confirm("Delete the expression \"" + name + "\"?")) return;
-
-            favorites.splice(idx, 1);
-
-            if (saveExpressionFavorites(favorites)) {
-                current = null;
-                txtName.text = "";
-                txtCode.text = "";
-                describe(null);
-                refreshList(null);
-                status.text = "Expression deleted: " + name;
-            }
-        };
-
-        btnCapture.onClick = function () {
-            var props = collectSelectedExpressionProperties();
-
-            if (props.length === 0) {
-                alert("Select a property with an expression.");
-                return;
-            }
-
-            var captured = "";
-            try { captured = props[0].expression; } catch (e) {}
-
-            if (trimString(captured) === "") {
-                alert("The first selected property has no expression.");
-                return;
-            }
-
-            current = null;
-            list.selection = null;
-            txtCode.text = captured;
-            describe(null);
-
-            if (trimString(txtName.text) === "") {
-                try { txtName.text = props[0].name; } catch (nameErr) { txtName.text = "Expression"; }
-            }
-
-            status.text = "Expression captured. Name it and save.";
-        };
-
-        btnApply.onClick = applyCurrentExpression;
-
-        refreshCategories();
-        refreshList(null);
     }
 
     // ================================================================
@@ -4230,8 +3115,8 @@
     function buildCurvesTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
         var ED_RANGE = [-0.6, 1.6];
         var ED_PAD = 12;
@@ -4260,13 +3145,22 @@
         ddCurves.alignment = ["fill", "center"];
         ddCurves.helpTip = "Pick a curve: it is applied to the selected keyframes right away";
 
-        var btnFav = uiButton(libRow, "★", {width: 28, tip: "Favorite / unfavorite (favorites show at the top)"});
+        var btnFav = uiIconButton(libRow, {icon: "star", tip: "Favorite / unfavorite (favorites show at the top)"});
+        var btnSave = uiIconButton(libRow, {icon: "save", tip: "Save the editor curve to the library (updates if the name exists)"});
+        var btnDelete = uiIconButton(libRow, {icon: "trash", tip: "Delete the chosen curve from the library"});
+
+        // ----- Modo: Clássico | Valor | Velocidade -----
+        var modeSeg = uiSegmented(tab, [
+            {value: "classic", label: "Classic", icon: "classic", tip: "Classic easy ease: in and out influence, speed 0"},
+            {value: "value", label: "Value", icon: "value", tip: "Value curve (like the Value Graph)"},
+            {value: "speed", label: "Speed", icon: "speed", tip: "Speed curve (like the Speed Graph): handles = influence and speed"}
+        ], function (v) { setMode(v); });
 
         // ----- Editor -----
         var edRow = tab.add("group");
         edRow.orientation = "row";
         edRow.alignChildren = ["left", "top"];
-        edRow.spacing = 8;
+        edRow.spacing = 6;
 
         var editor = edRow.add("group");
         editor.alignment = ["left", "top"];
@@ -4277,24 +3171,16 @@
         edSide.orientation = "column";
         edSide.alignment = ["fill", "top"];
         edSide.alignChildren = ["fill", "top"];
-        edSide.spacing = 5;
+        edSide.spacing = 3;
 
         function sideRow(label) {
             var r = edSide.add("group");
             r.orientation = "row";
             r.alignChildren = ["fill", "center"];
             var l = uiLabel(r, label);
-            l.preferredSize.width = 58;
+            l.preferredSize.width = 54;
             return r;
         }
-
-        // Modo do gráfico: Valor (curva bezier) ou Velocidade (speed graph do AE)
-        var modeRow = sideRow("Graph:");
-        modeRow.spacing = 2;
-        var btnModeValue = uiButton(modeRow, "Value", {tip: "Value curve (like the Value Graph)"});
-        var btnModeSpeed = uiButton(modeRow, "Speed", {tip: "Speed curve (like the Speed Graph): handles = influence and speed"});
-        uiFlex(btnModeValue, 30);
-        uiFlex(btnModeSpeed, 30);
 
         var txtValues = uiFlex(sideRow("Bezier:").add("edittext", undefined, ""));
         txtValues.helpTip = "x1, y1, x2, y2 — you can paste from cubic-bezier.com. Enter applies.";
@@ -4309,16 +3195,12 @@
         uiFlex(txtCat);
         txtCat.helpTip = "Type an existing category or create a new one";
 
-        var manageRow = edSide.add("group");
-        manageRow.orientation = "row";
-        manageRow.alignChildren = ["fill", "center"];
-        manageRow.spacing = 4;
-
-        var btnSave = uiButton(manageRow, "Save", {tip: "Saves to the library (updates if the name exists)"});
-        var btnDelete = uiButton(manageRow, "Delete");
-
         // ----- Clássico (easy ease com influência ajustável) -----
-        var classicSec = uiSection(tab, "Classic");
+        var classicSec = tab.add("group");
+        classicSec.orientation = "column";
+        classicSec.alignment = ["fill", "top"];
+        classicSec.alignChildren = ["fill", "top"];
+        classicSec.spacing = 2;
         var classic = {
             "in": parseFloat(loadSetting("classicIn", "33.33")),
             "out": parseFloat(loadSetting("classicOut", "33.33")),
@@ -4345,7 +3227,7 @@
             var c = state.leftButtonPressed ? THEME.accentDown : (state.mouseOver ? THEME.accentHover : THEME.accent);
             var cx = w / 2;
             var cy = h / 2;
-            var r = 6;
+            var r = 5;
 
             if (state.mouseOver) {
                 uiRoundRect(g, 0, 0, w, h, 4);
@@ -4437,10 +3319,10 @@
             var rowC = classicSec.add("group");
             rowC.orientation = "row";
             rowC.alignChildren = ["fill", "center"];
-            rowC.spacing = 6;
+            rowC.spacing = 4;
 
             var glyph = rowC.add("group");
-            glyph.preferredSize = [14, 22];
+            glyph.preferredSize = [12, 20];
             glyph.mesmoGlyph = def.glyph;
             glyph.onDraw = drawGlyph;
             glyph.helpTip = def.tip;
@@ -4455,7 +3337,7 @@
             fld.helpTip = def.tip + " (0.1 to 100)";
 
             var ico = rowC.add("button", undefined, "");
-            ico.preferredSize = [24, 24];
+            ico.preferredSize = [22, 20];
             ico.mesmoSide = def.side;
             ico.onDraw = drawClassicIcon;
             ico.helpTip = "Apply " + (def.side === "in" ? "to the in side" : def.side === "out" ? "to the out side" : "to both sides") + " of the selected keyframes";
@@ -4498,7 +3380,9 @@
 
         // ----- desenho do editor -----
 
-        lib.mode = loadSetting("curvesGraph", "value") === "speed" ? "speed" : "value";
+        lib.view = loadSetting("curvesGraph", "value");
+        if (lib.view !== "speed" && lib.view !== "classic") lib.view = "value";
+        lib.mode = lib.view === "speed" ? "speed" : "value";
 
         function edBox() {
             var w = editor.size[0];
@@ -4669,17 +3553,18 @@
         };
 
         function setMode(m) {
-            lib.mode = m;
+            var classicMode = m === "classic";
+            lib.mode = classicMode ? (lib.mode === "speed" ? "speed" : "value") : m;
+            lib.view = m;
             saveSetting("curvesGraph", m);
-            btnModeValue.mesmoPrimary = m === "value";
-            btnModeSpeed.mesmoPrimary = m === "speed";
-            uiRedraw(btnModeValue);
-            uiRedraw(btnModeSpeed);
-            uiRedraw(editor);
-        }
+            modeSeg.select(m, true);
 
-        btnModeValue.onClick = function () { setMode("value"); };
-        btnModeSpeed.onClick = function () { setMode("speed"); };
+            // Clássico troca o editor pelos sliders de influência
+            uiSetShown(edRow, !classicMode);
+            uiSetShown(classicSec, classicMode);
+            uiRedraw(editor);
+            requestRelayout();
+        }
 
         // ----- aplicar ao vivo -----
 
@@ -5062,7 +3947,7 @@
 
         refreshDropdown();
         loadIntoEditor(null);
-        setMode(lib.mode);
+        setMode(lib.view);
 
     }
 
@@ -5590,55 +4475,45 @@
     function buildCreateTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
+        // Uma linha de ícones (o nome aparece ao passar o mouse)
         var KINDS = [
-            [{k: "text", label: "Text"}, {k: "adjustment", label: "Adjust."}, {k: "nullLayer", label: "Null"}, {k: "solid", label: "Solid"}],
-            [{k: "shape", label: "Shape"}, {k: "camera", label: "Camera"}, {k: "light", label: "Light"}]
+            {k: "text", icon: "text", tip: "Text: text layer"},
+            {k: "adjustment", icon: "adjust", tip: "Comp-sized Adjustment Layer"},
+            {k: "nullLayer", icon: "nullLayer", tip: "Null Object"},
+            {k: "solid", icon: "solid", tip: "Comp-sized solid (pick a color)"},
+            {k: "shape", icon: "shape", tip: "Empty Shape Layer"},
+            {k: "camera", icon: "camera", tip: "Centered camera"},
+            {k: "light", icon: "light", tip: "Centered (Point) light"}
         ];
-        var TIPS = {
-            text: "Text layer",
-            adjustment: "Comp-sized Adjustment Layer",
-            nullLayer: "Null Object",
-            solid: "Comp-sized solid (pick a color)",
-            shape: "Empty Shape Layer",
-            camera: "Centered camera",
-            light: "Centered (Point) light"
-        };
 
         var status;
 
-        for (var r = 0; r < KINDS.length; r++) {
-            var row = tab.add("group");
-            row.orientation = "row";
-            row.alignChildren = ["fill", "center"];
-            row.spacing = 4;
+        var row = tab.add("group");
+        row.orientation = "row";
+        row.alignChildren = ["fill", "center"];
+        row.spacing = 3;
 
-            for (var c = 0; c < 4; c++) {
-                var item = KINDS[r][c];
-                if (!item) {
-                    // espaço vazio para manter a grade
-                    var spacer = row.add("group");
-                    spacer.preferredSize = [30, 26];
-                    spacer.alignment = ["fill", "center"];
-                    continue;
-                }
-
-                var b = uiButton(row, item.label, {height: 26, tip: TIPS[item.k]});
-                uiFlex(b, 30);
-                b.mesmoKind = item.k;
-                b.onClick = function () {
-                    var layer = createLayerOfKind(this.mesmoKind);
-                    if (layer) status.text = "Created: " + layer.name;
-                };
-            }
+        for (var c = 0; c < KINDS.length; c++) {
+            var b = uiIconButton(row, {icon: KINDS[c].icon, tip: KINDS[c].tip, height: 24});
+            uiFlex(b, 24);
+            b.mesmoKind = KINDS[c].k;
+            b.onClick = function () {
+                var layer = createLayerOfKind(this.mesmoKind);
+                if (layer) status.text = "Created: " + layer.name;
+            };
         }
 
-        var btnNull = uiButton(tab, "NULL TO POSITION", {
+        var btnNull = uiIconButton(tab, {
+            icon: "nullLayer",
+            label: "NULL TO POSITION",
             primary: true,
+            height: 24,
             tip: "Select one or more layers: creates a null at their point and links Position to it. Several layers = one single null that moves them all."
         });
+        btnNull.alignment = ["fill", "top"];
 
         status = addStatus(tab, "Click to create in the open comp.");
 
@@ -5673,10 +4548,10 @@
     function buildAnchorTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
-        var CELL = 28;
+        var CELL = 24;
         var NAMES = [
             ["Top left", "Top", "Top right"],
             ["Left", "Center", "Right"],
@@ -5780,31 +4655,31 @@
             }
         }
 
-        var help = uiFlex(row0.add("statictext", undefined,
-            "Moves the Anchor Point to the corner, edge or center of the layer without moving it.",
-            {multiline: true}), 60);
-        help.alignment = ["fill", "fill"];
-        uiColorText(help, THEME.textDim);
+        gridBox.helpTip = "Moves the Anchor Point to the corner, edge or center of the layer without moving it.";
 
-        status = addStatus(tab, "Select layers and click a point.");
+        status = addStatus(tab, "Click a point.");
+        status.helpTip = "Select layers and click a point.";
     }
 
     function buildExtractTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
-        var info = uiFlex(uiLabel(tab, "Splits each shape-layer group into its own layer."), 60);
-        info.helpTip = "Each group in Contents becomes its own layer, in the same position.";
-
-        var cbCenter = uiFlex(tab.add("checkbox", undefined, "Center each piece's anchor"));
+        var cbCenter = uiFlex(tab.add("checkbox", undefined, "Center anchor"));
         cbCenter.value = loadSetting("extractCenter", "1") === "1";
+        cbCenter.helpTip = "Center each piece's anchor";
 
-        var cbDelete = uiFlex(tab.add("checkbox", undefined, "Delete the original (otherwise just hide it)"));
+        var cbDelete = uiFlex(tab.add("checkbox", undefined, "Delete original"));
         cbDelete.value = loadSetting("extractDelete", "0") === "1";
+        cbDelete.helpTip = "Delete the original (otherwise just hide it)";
 
-        var btn = uiButton(tab, "EXTRACT SHAPES", {primary: true});
+        var btn = uiIconButton(tab, {
+            icon: "explode", label: "EXTRACT", primary: true, height: 24,
+            tip: "Splits each shape-layer group into its own layer, in the same position."
+        });
+        btn.alignment = ["fill", "top"];
         var status = addStatus(tab, "Select shape layers with 2 or more groups.");
 
         btn.onClick = function () {
@@ -5848,15 +4723,32 @@
         };
     }
 
+    // Anchor Point e Extract juntos, lado a lado.
+    function buildAnchorExtractTab(tab) {
+        tab.orientation = "row";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 12;
+        tab.margins = [0, 3, 0, 0];
+
+        var left = uiSection(tab, "Anchor Point");
+        left.parent.alignment = ["left", "top"];
+        var right = uiSection(tab, "Extract");
+        right.parent.preferredSize.width = 60;
+
+        buildAnchorTab(left);
+        buildExtractTab(right);
+    }
+
     function buildBeatsTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
         var sensRow = tab.add("group");
         sensRow.orientation = "row";
         sensRow.alignChildren = ["fill", "center"];
+        sensRow.spacing = 4;
 
         uiLabel(sensRow, "Sensitivity:");
         var sens = sensRow.add("slider", undefined, parseFloat(loadSetting("beatSens", "5")), 1, 10);
@@ -5866,22 +4758,32 @@
         var sensVal = uiLabel(sensRow, "");
         sensVal.preferredSize.width = 22;
 
+        // intervalo + opções na mesma linha
         var gapRow = tab.add("group");
         gapRow.orientation = "row";
         gapRow.alignChildren = ["left", "center"];
+        gapRow.spacing = 4;
 
         uiLabel(gapRow, "Minimum gap:");
         var txtGap = gapRow.add("edittext", undefined, loadSetting("beatGap", "6"));
-        txtGap.characters = 4;
+        txtGap.characters = 3;
         uiLabel(gapRow, "frames");
 
-        var cbClear = uiFlex(tab.add("checkbox", undefined, "Delete the layer's old markers"));
+        var optRow = tab.add("group");
+        optRow.orientation = "row";
+        optRow.alignChildren = ["fill", "center"];
+        optRow.spacing = 8;
+
+        var cbClear = uiFlex(optRow.add("checkbox", undefined, "Delete old"));
         cbClear.value = loadSetting("beatClear", "1") === "1";
+        cbClear.helpTip = "Delete the layer's old markers";
 
-        var cbNumber = uiFlex(tab.add("checkbox", undefined, "Number the markers (1, 2, 3...)"));
+        var cbNumber = uiFlex(optRow.add("checkbox", undefined, "Number"));
         cbNumber.value = loadSetting("beatNumber", "0") === "1";
+        cbNumber.helpTip = "Number the markers (1, 2, 3...)";
 
-        var btn = uiButton(tab, "MARK BEATS", {primary: true});
+        var btn = uiIconButton(tab, {icon: "beats", label: "MARK BEATS", primary: true, height: 24});
+        btn.alignment = ["fill", "top"];
         var status = addStatus(tab, "Select a layer with audio.");
 
         function syncSens() {
@@ -5948,8 +4850,8 @@
 
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
-        win.spacing = 6;
-        win.margins = [10, 8, 10, 10];
+        win.spacing = 4;
+        win.margins = [8, 6, 8, 8];
 
         uiHeader(win);
 
@@ -5967,8 +4869,7 @@
                 label: "Layers", abbr: "Lyr", tip: "Create layers, null to position, anchor point, extract and beats",
                 tools: [
                     {label: "Create", build: buildCreateTab, width: 260},
-                    {label: "Anchor Point", build: buildAnchorTab, width: 240},
-                    {label: "Extract", build: buildExtractTab, width: 250},
+                    {label: "Anchor · Extract", build: buildAnchorExtractTab, width: 300},
                     {label: "Beats", build: buildBeatsTab, width: 260}
                 ]
             },
@@ -5978,12 +4879,6 @@
                     {label: "Settings", build: buildCompsTab, width: 300},
                     {label: "Duplicate", build: buildDuplicaTab, width: 300},
                     {label: "3D / Blur", build: build3DTab, width: 270}
-                ]
-            },
-            {
-                label: "Expressions", abbr: "Expr", tip: "Expression shortcuts and your favorites",
-                tools: [
-                    {label: "Expressions", build: buildExpressionsTab, width: 360, noHeader: true}
                 ]
             }
         ];
@@ -6006,7 +4901,7 @@
             row.orientation = "row";
             row.alignment = ["fill", "fill"];
             row.alignChildren = ["fill", "top"];
-            row.spacing = 12;
+            row.spacing = 10;
 
             var view = {row: row, tools: [], hooks: [], minWide: 0, pendingCollapse: []};
 
@@ -6028,7 +4923,7 @@
                 block.orientation = "column";
                 block.alignment = ["fill", "top"];
                 block.alignChildren = ["fill", "top"];
-                block.spacing = 4;
+                block.spacing = 3;
                 block.mesmoWidth = tool.width;
 
                 var header = tool.noHeader ? null : uiToolHeader(block, tool.label);
@@ -6248,9 +5143,15 @@
             scrollTo(this.value);
         };
 
+        // tudo mais baixo e com menos espaço vazio
+        uiCompact(win);
+
         applyResponsive();
         win.layout.layout(true);
         nav.select(startGroup);
+
+        // ferramentas que trocam de modo (ex.: Curvas > Clássico) reorganizam a aba
+        RELAYOUT_HOOK = relayout;
 
         // Janela flutuante: abre num tamanho confortável, rolando o resto.
         if (win instanceof Window) {

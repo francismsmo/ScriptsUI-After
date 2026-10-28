@@ -2,16 +2,15 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-**Versão atual: v2.13** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
+**Versão atual: v2.14** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
 
-> **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface (and the expression tutorials) in English. Install it the same way. See [English version](#english-version) below.
+> **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface in English. Install it the same way. See [English version](#english-version) below.
 
-O painel tem 4 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
+O painel tem 3 abas principais, e cada uma mostra **todas as suas ferramentas ao mesmo tempo**:
 
 - **Animação** = Curvas + Explode
-- **Camadas** = Criar + Anchor Point + Extract + Batidas
+- **Camadas** = Criar + Anchor Point · Extract + Batidas
 - **Comps** = Ajustes + Duplicar + 3D / Blur
-- **Expressões**
 
 Com o painel largo, as ferramentas ficam lado a lado em colunas; estreito, ficam empilhadas. O botão **⇆** ao lado das abas troca entre *Auto*, *Lado a lado* e *Empilhado*. Clicar no cabeçalho de uma ferramenta recolhe ou expande ela, e o painel lembra o que ficou recolhido.
 
@@ -21,16 +20,15 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 
 | Ferramenta | O que faz |
 |---|---|
-| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e editor **ao vivo**, por valor ou por speed graph: escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
-| **Criar** | Botões para criar Texto, Adjustment Layer, Null, Sólido (com seletor de cor), Shape, Câmera e Luz na comp aberta, logo acima da camada selecionada. **Null na Position:** selecione uma ou mais camadas (não precisa abrir a Position) e ele cria um único null que controla a Position de todas. O nome segue `NomeDaCamada-position-null`. |
+| **Curvas** | Biblioteca de curvas de velocidade num dropdown (favoritas no topo, depois por categoria) e três modos: **Clássico** (easy ease com influência ajustável), **Valor** e **Velocidade** (editor ao vivo): escolher uma curva, arrastar as alças ou digitar os valores já muda as keyframes selecionadas na timeline. Salve, favorite e exclua suas curvas. |
+| **Criar** | Uma linha de ícones para criar Texto, Adjustment Layer, Null, Sólido (com seletor de cor), Shape, Câmera e Luz na comp aberta, logo acima da camada selecionada. **Null na Position:** selecione uma ou mais camadas (não precisa abrir a Position) e ele cria um único null que controla a Position de todas. O nome segue `NomeDaCamada-position-null`. |
 | **Anchor Point** | Grade 3×3: move o Anchor Point para uma quina, borda ou o centro das camadas selecionadas sem tirá-las do lugar. |
 | **Extract** | Separa cada grupo de uma shape layer em uma camada própria, na mesma posição e ordem. Fills e strokes soltos no topo vão junto em cada peça. Pode centralizar o anchor de cada peça e apagar ou só esconder a original. |
 | **Batidas** | Analisa o áudio da camada selecionada e cria um marcador em cada batida. Tem ajuste de sensibilidade, intervalo mínimo entre marcadores, opção de apagar os marcadores antigos e de numerar. |
-| **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. "Ler 1ª Comp" puxa os valores da primeira comp selecionada. |
+| **Ajustes** | Muda em lote resolução (com trava de proporção), frame rate, duração e renderer 3D das comps selecionadas no Project. |
 | **Duplicar** | Duplica comps "a fundo": as precomps internas também viram cópias independentes. Sufixo/prefixo, buscar e trocar no nome e atualização de expressões. Organiza tudo numa pasta própria, com as precomps numa subpasta `PRECOMPS_<sufixo>`. |
 | **Explode** | Divide camadas de texto em letras, palavras, linhas, palavra específica ou regex, mantendo a posição visual de cada peça. |
-| **3D / Blur** | Liga ou desliga o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
-| **Expressões** | 18 atalhos prontos (delay, wiggle, texto, contadores, caixa reativa, 3D…), cada um com descrição, onde aplicar e tutorial em comentário. Também guarda suas próprias expressões (★ Minhas): salvar, buscar, capturar de uma propriedade e aplicar (duplo clique aplica direto). |
+| **3D / Blur** | Botões de ícone Ligar/Desligar para o switch 3D ou o **Motion Blur** em todas as camadas possíveis das comps selecionadas (ou da comp aberta), opcionalmente entrando nas precomps e em camadas bloqueadas. O Motion Blur também liga a chave da própria comp, para o blur aparecer no preview e no render. Câmeras, luzes, nulls e camadas só de áudio são ignoradas no blur. |
 
 ## Instalação
 
@@ -39,7 +37,7 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
    - **macOS:** `/Applications/Adobe After Effects <versão>/Scripts/ScriptUI Panels/`
 2. Se você tinha o `CompManager_Mesmo.jsx` instalado, apague ele da pasta (ele foi substituído).
 3. Reinicie o After Effects e abra pelo menu **Window → MesmoTools.jsx**.
-4. Para salvar curvas e expressões, ative **Preferências → Scripting & Expressions → Allow Scripts to Write Files and Access Network**.
+4. Para salvar curvas, ative **Preferências → Scripting & Expressions → Allow Scripts to Write Files and Access Network**.
 
 ## Curvas de velocidade
 
@@ -48,9 +46,9 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 - **Selecione as keyframes** (duas ou mais vizinhas, em uma ou várias propriedades) e mexa no editor: a timeline atualiza na hora. Com uma keyframe só, a curva vai no trecho até a próxima.
 - **Dropdown:** escolher uma curva já aplica.
 - **Alças:** arraste para ajustar ao vivo; Shift arredonda os valores. Se o mouse sair do editor, a alça é solta ali.
-- **Gráfico Valor / Velocidade:** *Valor* mostra a curva bezier; *Velocidade* mostra o speed graph, como no Graph Editor do After. Nele, cada alça é a influência (para os lados) e a velocidade da keyframe (para cima e para baixo). A linha tracejada é a velocidade média do trecho (1×).
-- **Salvar / ★ / Excluir:** guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown) ou apaga.
-- **Clássico:** o easy ease do After com a influência ajustável, keyframe por keyframe (velocidade 0, como o F9).
+- **Modos Clássico / Valor / Velocidade** (seletor com ícones acima do editor). *Valor* e *Velocidade*: *Valor* mostra a curva bezier; *Velocidade* mostra o speed graph, como no Graph Editor do After. Nele, cada alça é a influência (para os lados) e a velocidade da keyframe (para cima e para baixo). A linha tracejada é a velocidade média do trecho (1×).
+- **★ / Salvar / Excluir** (ícones ao lado do dropdown): guarda a curva do editor com nome e categoria, marca como favorita (vai pro topo do dropdown) ou apaga.
+- **Clássico:** troca o gráfico por três sliders: o easy ease do After com a influência ajustável, keyframe por keyframe (velocidade 0, como o F9).
   - **<** Entrada: influência do lado que chega em cada keyframe.
   - **>** Saída: influência do lado que sai.
   - **×** Ambos: mesma influência nos dois lados (ajusta os outros dois sliders junto).
@@ -60,23 +58,6 @@ As curvas são guardadas como **cubic-bezier** (`x1, y1, x2, y2`), o mesmo forma
 
 Funciona em qualquer propriedade que aceite ease: posição, escala, rotação, opacidade, cor, parâmetros de efeito e também **paths de máscara e de shape**. Para paths, a velocidade média do trecho é lida do próprio After. Só ficam de fora as que o After deixa apenas em Hold, como Source Text.
 Em **Position** com caminho espacial, curvas que passam do limite (tipo *Back*) não ultrapassam o ponto final. Para esse efeito, use **Separate Dimensions**.
-
-## Atalhos de expressões
-
-Vêm do repositório [After-effects-Expressions](https://github.com/francismsmo/After-effects-Expressions). Todo atalho abre com um bloco de comentário explicando **o que faz**, **onde aplicar**, **como usar** passo a passo e os cuidados. O comentário vai junto para a propriedade, então dá para reler o tutorial direto no After.
-
-| Categoria | Atalhos |
-|---|---|
-| Delay | Delay do Control — Position / Rotation / Scale |
-| Wiggle | Wiggle crescente, crescente com limite, diminuindo, em loop, na escala proporcional |
-| Texto | Revelar texto letra por letra, Encadear APOIO depois do PRINCIPAL |
-| Números | Contador 2 dígitos, Contador 6 dígitos (000.000), Timecode de câmera |
-| Layout | Caixa reativa (Anchor Point do texto + Size da caixa), Tamanho por sliders |
-| 3D | Escala constante pela câmera |
-| Movimento | Desacelerar até parar |
-
-- Quando a expressão usa um `Slider Control` na própria camada, o painel cria o efeito sozinho se ele não existir (dá para desligar).
-- Os atalhos não podem ser apagados. Se você editar um e salvar, ele vira uma cópia sua em ★ Minhas.
 
 ## Camadas: detalhes
 
@@ -122,10 +103,9 @@ Versões avulsas antigas, mantidas só como referência. Tudo o que elas fazem j
 `MesmoTools_EN.jsx` is generated from the Portuguese file, so both always have the same features:
 
 ```
-python3 tools/i18n/exprlib_en.py   # English expression library (only if expressions changed)
 python3 tools/build_en.py          # rebuilds MesmoTools_EN.jsx
 ```
 
 - Always edit `MesmoTools.jsx`, then run `tools/build_en.py`. The UI translations live in the `TR` table inside that script; it fails and lists any Portuguese text left untranslated.
-- Both versions share the same saved curves, favorite expressions and settings.
+- Both versions share the same saved curves and settings.
 - Code comments inside the file stay in Portuguese; everything shown in After Effects is in English.

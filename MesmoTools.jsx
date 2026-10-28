@@ -6,15 +6,17 @@
     - Animação = Curvas + Explode (juntos na mesma tela)
     - Camadas = Criar + Anchor Point + Extract + Batidas
     - Comps = Ajustes + Duplicar + 3D / Blur (juntos na mesma tela)
-    - Expressões: atalhos prontos + suas expressões favoritas
 
     Arquivos salvos em Folder.userData/MesmoTools/:
     - speed_curves.txt          (curvas)
-    - expression_favorites.txt  (expressões)
 
-    Versão atual: v2.13 (mude SCRIPT_VERSION a cada alteração: 2.14, 2.15...)
+    Versão atual: v2.14 (mude SCRIPT_VERSION a cada alteração: 2.15, 2.16...)
     Histórico completo em CHANGELOG.md.
 
+    v2.14 - Interface compacta: botões e dropdowns menores, ícones; Curvas
+            com modos Clássico | Valor | Velocidade; Explode e
+            Anchor·Extract lado a lado; Criar e 3D/Blur com ícones; sai a
+            aba Expressões e o botão Ler 1ª Comp.
     v2.13 - Curvas > Clássico: Entrada (<), Saída (>) e Ambos (×) com
             slider, campo e botão; easy ease por keyframe, ao vivo.
     v2.12 - Curvas: arraste mais leve; paths de máscara/shape e outros
@@ -53,7 +55,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.13";
+    var SCRIPT_VERSION = "2.14";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -271,7 +273,7 @@
 
         var b = parent.add("button", undefined, label);
         b.mesmoPrimary = !!opts.primary;
-        b.preferredSize.height = opts.height || (opts.primary ? 32 : 24);
+        b.preferredSize.height = opts.height || (opts.primary ? 24 : 20);
 
         if (opts.width) b.preferredSize.width = opts.width;
         if (opts.tip) b.helpTip = opts.tip;
@@ -313,6 +315,330 @@
         return b;
     }
 
+
+    // ---------------- ícones desenhados ----------------
+    // Cada ícone desenha dentro de um quadrado (x, y, s) com a cor c.
+
+    function iconPoly(g, pts, c, fill, w) {
+        g.newPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (var i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+        g.closePath();
+        if (fill) g.fillPath(uiBrush(g, c));
+        else g.strokePath(uiPen(g, c, w || 1.5));
+    }
+
+    function iconStarPts(cx, cy, r1, r2, n) {
+        var pts = [];
+        for (var i = 0; i < n * 2; i++) {
+            var r = i % 2 === 0 ? r1 : r2;
+            var a = -Math.PI / 2 + i * Math.PI / n;
+            pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+        }
+        return pts;
+    }
+
+    var ICONS = {
+        star: function (g, x, y, s, c) {
+            iconPoly(g, iconStarPts(x + s / 2, y + s / 2 + 0.5, s * 0.5, s * 0.22, 5), c, true);
+        },
+        save: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + 1, s - 2, s - 2);
+            g.strokePath(uiPen(g, c, 1.5));
+            g.newPath();
+            g.rectPath(x + s * 0.3, y + 1, s * 0.4, s * 0.3);
+            g.fillPath(uiBrush(g, c));
+            g.newPath();
+            g.rectPath(x + s * 0.25, y + s * 0.6, s * 0.5, s * 0.3);
+            g.fillPath(uiBrush(g, c));
+        },
+        trash: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + s * 0.18, s - 2, 1.6);
+            g.rectPath(x + s * 0.38, y, s * 0.24, s * 0.18);
+            g.fillPath(uiBrush(g, c));
+            iconPoly(g, [[x + s * 0.18, y + s * 0.3], [x + s * 0.82, y + s * 0.3], [x + s * 0.74, y + s], [x + s * 0.26, y + s]], c, false, 1.5);
+        },
+        // easy ease do After: ampulheta
+        classic: function (g, x, y, s, c) {
+            iconPoly(g, [[x + 1, y + 1], [x + s - 1, y + 1], [x + s / 2, y + s / 2]], c, true);
+            iconPoly(g, [[x + 1, y + s - 1], [x + s - 1, y + s - 1], [x + s / 2, y + s / 2]], c, true);
+        },
+        // curva de valor: S
+        value: function (g, x, y, s, c) {
+            uiStrokeCurve(g, {x1: 0.7, y1: 0, x2: 0.3, y2: 1}, x, y, s, s, [0, 1], c, 2);
+        },
+        // curva de velocidade: sino
+        speed: function (g, x, y, s, c) {
+            g.newPath();
+            for (var i = 0; i <= 16; i++) {
+                var t = i / 16;
+                var v = Math.exp(-Math.pow((t - 0.5) * 3.6, 2));
+                var px = x + t * s;
+                var py = y + s - v * s;
+                if (i === 0) g.moveTo(px, py);
+                else g.lineTo(px, py);
+            }
+            g.strokePath(uiPen(g, c, 2));
+        },
+        text: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + 1, s - 2, s * 0.2);
+            g.rectPath(x + s / 2 - s * 0.11, y + 1, s * 0.22, s - 2);
+            g.fillPath(uiBrush(g, c));
+        },
+        adjust: function (g, x, y, s, c) {
+            g.newPath();
+            g.ellipsePath(x + 1, y + 1, s - 2, s - 2);
+            g.strokePath(uiPen(g, c, 1.5));
+            var r = (s - 2) / 2;
+            var cx = x + s / 2;
+            var cy = y + s / 2;
+            var pts = [];
+            for (var i = 0; i <= 12; i++) {
+                var a = -Math.PI / 2 + Math.PI * i / 12;
+                pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+            }
+            iconPoly(g, pts, c, true);
+        },
+        nullLayer: function (g, x, y, s, c) {
+            g.newPath();
+            g.rectPath(x + 1, y + 1, s - 2, s - 2);
+            g.strokePath(uiPen(g, c, 1.5));
+            g.newPath();
+            g.rectPath(x + s / 2 - 0.75, y + s * 0.3, 1.5, s * 0.4);
+            g.rectPath(x + s * 0.3, y + s / 2 - 0.75, s * 0.4, 1.5);
+            g.fillPath(uiBrush(g, c));
+        },
+        solid: function (g, x, y, s, c) {
+            uiRoundRect(g, x + 1, y + 1, s - 2, s - 2, 2);
+            g.fillPath(uiBrush(g, c));
+        },
+        shape: function (g, x, y, s, c) {
+            var pts = [];
+            for (var i = 0; i < 5; i++) {
+                var a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+                pts.push([x + s / 2 + s * 0.48 * Math.cos(a), y + s / 2 + 0.5 + s * 0.48 * Math.sin(a)]);
+            }
+            iconPoly(g, pts, c, true);
+        },
+        camera: function (g, x, y, s, c) {
+            uiRoundRect(g, x, y + s * 0.25, s * 0.66, s * 0.5, 1.5);
+            g.fillPath(uiBrush(g, c));
+            iconPoly(g, [[x + s * 0.7, y + s / 2], [x + s, y + s * 0.25], [x + s, y + s * 0.75]], c, true);
+        },
+        light: function (g, x, y, s, c) {
+            var cx = x + s / 2;
+            var cy = y + s / 2;
+            g.newPath();
+            g.ellipsePath(cx - s * 0.2, cy - s * 0.2, s * 0.4, s * 0.4);
+            g.fillPath(uiBrush(g, c));
+            g.newPath();
+            for (var i = 0; i < 8; i++) {
+                var a = i * Math.PI / 4;
+                g.moveTo(cx + Math.cos(a) * s * 0.32, cy + Math.sin(a) * s * 0.32);
+                g.lineTo(cx + Math.cos(a) * s * 0.5, cy + Math.sin(a) * s * 0.5);
+            }
+            g.strokePath(uiPen(g, c, 1.5));
+        },
+        cube: function (g, x, y, s, c) {
+            var cx = x + s / 2;
+            var t = y + 1;
+            var m = y + s * 0.3;
+            var b = y + s - 1;
+            var mid = y + s * 0.6;
+            g.newPath();
+            g.moveTo(cx, t); g.lineTo(x + s - 1, m); g.lineTo(x + s - 1, mid + s * 0.1);
+            g.lineTo(cx, b); g.lineTo(x + 1, mid + s * 0.1); g.lineTo(x + 1, m); g.closePath();
+            g.moveTo(x + 1, m); g.lineTo(cx, y + s * 0.55); g.lineTo(x + s - 1, m);
+            g.moveTo(cx, y + s * 0.55); g.lineTo(cx, b);
+            g.strokePath(uiPen(g, c, 1.5));
+        },
+        blur: function (g, x, y, s, c) {
+            g.newPath();
+            g.ellipsePath(x + s * 0.45, y + s * 0.2, s * 0.55, s * 0.6);
+            g.fillPath(uiBrush(g, c));
+            g.newPath();
+            g.rectPath(x, y + s * 0.3, s * 0.38, 1.6);
+            g.rectPath(x + s * 0.1, y + s * 0.5 - 0.8, s * 0.3, 1.6);
+            g.rectPath(x, y + s * 0.7 - 1.6, s * 0.38, 1.6);
+            g.fillPath(uiBrush(g, c));
+        },
+        explode: function (g, x, y, s, c) {
+            var cells = [[0, 0], [0.55, 0], [0, 0.55], [0.55, 0.55]];
+            for (var i = 0; i < cells.length; i++) {
+                g.newPath();
+                g.rectPath(x + cells[i][0] * s, y + cells[i][1] * s, s * 0.42, s * 0.42);
+                g.fillPath(uiBrush(g, c));
+            }
+        },
+        beats: function (g, x, y, s, c) {
+            var hs = [0.35, 0.8, 0.5, 1, 0.4];
+            for (var i = 0; i < hs.length; i++) {
+                g.newPath();
+                g.rectPath(x + i * s / 5 + 0.5, y + s * (1 - hs[i]), s / 5 - 1.5, s * hs[i]);
+                g.fillPath(uiBrush(g, c));
+            }
+        }
+    };
+
+    // Traço diagonal por cima: versão "desligar" do ícone.
+    function iconSlash(g, x, y, s, c, bg) {
+        g.newPath();
+        g.moveTo(x - 1, y + s + 1);
+        g.lineTo(x + s + 1, y - 1);
+        g.strokePath(uiPen(g, bg, 4));
+        g.newPath();
+        g.moveTo(x - 1, y + s + 1);
+        g.lineTo(x + s + 1, y - 1);
+        g.strokePath(uiPen(g, c, 1.5));
+    }
+
+    /*
+        Botão com ícone (e texto opcional ao lado).
+        opts: {icon, label, tip, width, height, primary, off}
+        off = desenha o ícone riscado (ação de desligar).
+    */
+    function uiIconButton(parent, opts) {
+        var b = parent.add("button", undefined, opts.label || "");
+        b.mesmoIcon = opts.icon;
+        b.mesmoOff = !!opts.off;
+        b.mesmoPrimary = !!opts.primary;
+        b.preferredSize = [opts.width || 24, opts.height || 22];
+        if (opts.tip) b.helpTip = opts.tip;
+
+        b.onDraw = function (state) {
+            var g = this.graphics;
+            var w = this.size[0];
+            var h = this.size[1];
+            var bg;
+            var fg;
+
+            if (this.mesmoPrimary) {
+                bg = state.leftButtonPressed ? THEME.accentDown : (state.mouseOver ? THEME.accentHover : THEME.accent);
+                fg = THEME.textOnAccent;
+            } else {
+                bg = state.leftButtonPressed ? THEME.surfaceDown : (state.mouseOver ? THEME.surfaceHover : THEME.surface);
+                fg = state.mouseOver ? THEME.text : THEME.textDim;
+            }
+
+            uiRoundRect(g, 0, 0, w, h, 4);
+            g.fillPath(uiBrush(g, bg));
+
+            var s = Math.min(h - 8, 14);
+            var font = uiFont(this.mesmoPrimary ? "BOLD" : "REGULAR", 11);
+            var label = this.text ? uiFit(g, this.text, font, w - s - 16) : "";
+            var lw = label ? uiMeasure(g, label, font)[0] + 5 : 0;
+            var ix = Math.round((w - s - lw) / 2);
+            var iy = Math.round((h - s) / 2);
+
+            if (ICONS[this.mesmoIcon]) ICONS[this.mesmoIcon](g, ix, iy, s, fg);
+            if (this.mesmoOff) iconSlash(g, ix, iy, s, fg, bg);
+            if (label) uiText(g, label, font, fg, ix + s + 5, 0, lw, h, "left");
+        };
+
+        return b;
+    }
+
+    /*
+        Controle segmentado (um ativo por vez), com ícone + texto.
+        items: [{value, label, icon, tip}]
+    */
+    function uiSegmented(parent, items, onSelect) {
+        var row = parent.add("group");
+        row.orientation = "row";
+        row.alignment = ["fill", "top"];
+        row.alignChildren = ["fill", "fill"];
+        row.spacing = 2;
+
+        var seg = {value: items[0].value, buttons: []};
+
+        for (var i = 0; i < items.length; i++) {
+            var b = row.add("button", undefined, items[i].label);
+            b.mesmoValue = items[i].value;
+            b.mesmoIcon = items[i].icon;
+            b.preferredSize = [30, 22];
+            b.helpTip = items[i].tip || items[i].label;
+
+            b.onDraw = function (state) {
+                var g = this.graphics;
+                var w = this.size[0];
+                var h = this.size[1];
+                var active = seg.value === this.mesmoValue;
+                var bg = active ? THEME.accent : (state.mouseOver ? THEME.surfaceHover : THEME.surface);
+                var fg = active ? THEME.textOnAccent : (state.mouseOver ? THEME.text : THEME.textDim);
+
+                uiRoundRect(g, 0, 0, w, h, 4);
+                g.fillPath(uiBrush(g, bg));
+
+                var s = 12;
+                var font = uiFont(active ? "BOLD" : "REGULAR", 11);
+                var label = uiFit(g, this.text, font, w - s - 14);
+                if (label.length < 3) label = ""; // estreito: só o ícone
+                var lw = label ? uiMeasure(g, label, font)[0] + 5 : 0;
+                var ix = Math.round((w - s - lw) / 2);
+
+                if (ICONS[this.mesmoIcon]) ICONS[this.mesmoIcon](g, ix, Math.round((h - s) / 2), s, fg);
+                if (label) uiText(g, label, font, fg, ix + s + 5, 0, lw, h, "left");
+            };
+
+            b.onClick = function () {
+                seg.select(this.mesmoValue);
+            };
+
+            seg.buttons.push(b);
+        }
+
+        seg.select = function (v, silent) {
+            seg.value = v;
+            uiRedraw(row);
+            if (!silent && onSelect) onSelect(v);
+        };
+
+        return seg;
+    }
+
+    // Mostra/esconde sem deixar o espaço reservado (o ScriptUI guarda o espaço).
+    function uiSetShown(el, shown) {
+        el.visible = shown;
+        el.maximumSize = shown ? [10000, 10000] : [10000, 0];
+    }
+
+    // As ferramentas pedem para o painel se reorganizar (ex.: trocar de modo).
+    var RELAYOUT_HOOK = null;
+    function requestRelayout() {
+        if (RELAYOUT_HOOK) {
+            try { RELAYOUT_HOOK(); } catch (e) {}
+        }
+    }
+
+    /*
+        Deixa tudo mais compacto: campos, dropdowns e checkboxes mais baixos
+        e grupos com espaçamento menor (só onde ficou o padrão do ScriptUI).
+    */
+    function uiCompact(container) {
+        var kids = container.children;
+        for (var i = 0; i < kids.length; i++) {
+            var k = kids[i];
+            try {
+                var t = k.type;
+                if (t === "dropdownlist") {
+                    k.preferredSize.height = 20;
+                } else if (t === "edittext" && !(k.properties && k.properties.multiline)) {
+                    k.preferredSize.height = 20;
+                } else if (t === "checkbox") {
+                    k.preferredSize.height = 18;
+                } else if ((t === "group" || t === "panel") && k.spacing === 10) {
+                    k.spacing = 4;
+                }
+            } catch (e) {}
+            try {
+                if (k.children && k.children.length) uiCompact(k);
+            } catch (e2) {}
+        }
+    }
+
     /*
         Seção com título em caixa alta, marcador laranja e linha fina.
         Devolve o grupo de conteúdo (use como se fosse um panel).
@@ -322,12 +648,12 @@
         wrap.orientation = "column";
         wrap.alignment = ["fill", "top"];
         wrap.alignChildren = ["fill", "top"];
-        wrap.spacing = 6;
-        wrap.margins = [0, 4, 0, 0];
+        wrap.spacing = 3;
+        wrap.margins = [0, 2, 0, 0];
 
         var head = wrap.add("group");
         head.alignment = ["fill", "top"];
-        head.preferredSize = [100, 16];
+        head.preferredSize = [100, 14];
         head.mesmoTitle = String(title).toUpperCase();
 
         head.onDraw = function () {
@@ -357,7 +683,7 @@
         body.orientation = "column";
         body.alignment = ["fill", "top"];
         body.alignChildren = ["fill", "top"];
-        body.spacing = 6;
+        body.spacing = 4;
         body.margins = [2, 0, 0, 0];
 
         return body;
@@ -406,7 +732,7 @@
     function uiHeader(parent) {
         var head = parent.add("group");
         head.alignment = ["fill", "top"];
-        head.preferredSize = [200, 30];
+        head.preferredSize = [200, 26];
 
         var logoCurve = {x1: 0.7, y1: 0, x2: 0.3, y2: 1};
 
@@ -454,7 +780,7 @@
             var b = row.add("button", undefined, items[i].label);
             b.mesmoShort = items[i].abbr || items[i].label;
             b.mesmoIndex = i;
-            b.preferredSize = [30, 28];
+            b.preferredSize = [30, 24];
             b.helpTip = items[i].tip || items[i].label;
 
             b.onDraw = function (state) {
@@ -515,7 +841,7 @@
     function uiToolHeader(parent, title) {
         var b = parent.add("button", undefined, title);
         b.alignment = ["fill", "top"];
-        b.preferredSize = [120, 26];
+        b.preferredSize = [120, 22];
         b.mesmoOpen = true;
         b.helpTip = "Clique para recolher ou expandir";
 
@@ -547,7 +873,7 @@
             g.closePath();
             g.fillPath(uiBrush(g, THEME.accent));
 
-            var font = uiFont("BOLD", 12);
+            var font = uiFont("BOLD", 11);
             uiText(g, uiFit(g, this.text.toUpperCase(), font, w - 32), font, THEME.text, 24, 0, w - 28, h, "left");
         };
 
@@ -582,22 +908,6 @@
         e a duração real em segundos é totalFrames / fps.
         Formatar e ler usando a mesma base garante ida e volta sem perder frames.
     */
-    function formatTimecode(seconds, fps) {
-        if (seconds < 0) seconds = 0;
-
-        var nominalFPS = Math.max(1, Math.round(fps));
-        var totalFrames = Math.round(seconds * fps);
-
-        var frames = totalFrames % nominalFPS;
-        var totalSeconds = Math.floor(totalFrames / nominalFPS);
-        var secs = totalSeconds % 60;
-        var minsTotal = Math.floor(totalSeconds / 60);
-        var mins = minsTotal % 60;
-        var hours = Math.floor(minsTotal / 60);
-
-        return hours + ":" + pad2(mins) + ":" + pad2(secs) + ":" + pad2(frames);
-    }
-
     function parseTimecode(tc, fps) {
         tc = trimString(tc);
 
@@ -689,40 +999,17 @@
         return null;
     }
 
-    function rendererFriendlyName(internalName) {
-        var s = String(internalName).toLowerCase();
-
-        if (s === "adbe advanced 3d" || s.indexOf("classic") !== -1) {
-            return "Classic 3D";
-        }
-
-        if (
-            s === "adbe calder" ||
-            (s.indexOf("advanced") !== -1 && s !== "adbe advanced 3d")
-        ) {
-            return "Advanced 3D";
-        }
-
-        if (s === "adbe ernst" || s.indexOf("cinema") !== -1) {
-            return "Cinema 4D";
-        }
-
-        return null;
-    }
-
     function buildCompsTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
         var header = tab.add("group");
         header.orientation = "row";
         header.alignChildren = ["fill", "center"];
 
         var selectionText = uiFlex(header.add("statictext", undefined, "Selecione comps no Project."));
-
-        var btnLoad = uiButton(header, "Ler 1ª Comp", {tip: "Carrega os valores da primeira comp selecionada"});
 
         var resizePanel = uiSection(tab, "Resolução");
         resizePanel.orientation = "column";
@@ -887,58 +1174,6 @@
             }
         }
 
-        function setFPSUI(fps) {
-            var eps = 0.001;
-
-            if (Math.abs(fps - 23.976) < eps) {
-                ddFPS.selection = 0; txtCustomFPS.text = "23,976"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 24) < eps) {
-                ddFPS.selection = 1; txtCustomFPS.text = "24"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 29.97) < eps) {
-                ddFPS.selection = 2; txtCustomFPS.text = "29,97"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 30) < eps) {
-                ddFPS.selection = 3; txtCustomFPS.text = "30"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 59.94) < eps) {
-                ddFPS.selection = 4; txtCustomFPS.text = "59,94"; txtCustomFPS.enabled = false;
-            } else if (Math.abs(fps - 60) < eps) {
-                ddFPS.selection = 5; txtCustomFPS.text = "60"; txtCustomFPS.enabled = false;
-            } else {
-                ddFPS.selection = 6;
-                txtCustomFPS.text = String(Math.round(fps * 100) / 100).replace(".", ",");
-                txtCustomFPS.enabled = true;
-            }
-        }
-
-        function setRendererUI(comp) {
-            var friendly = rendererFriendlyName(comp.renderer);
-            if (friendly === "Classic 3D") ddRenderer.selection = 0;
-            else if (friendly === "Advanced 3D") ddRenderer.selection = 1;
-            else if (friendly === "Cinema 4D") ddRenderer.selection = 2;
-        }
-
-        btnLoad.onClick = function () {
-            var comps = getSelectedComps();
-
-            if (comps.length === 0) {
-                alert("Selecione pelo menos uma composição no painel Project.");
-                return;
-            }
-
-            var comp = comps[0];
-
-            suppressResizeSync = true;
-            txtW.text = String(comp.width);
-            txtH.text = String(comp.height);
-            suppressResizeSync = false;
-
-            updateLockedRatioFromFields();
-            setFPSUI(comp.frameRate);
-            txtDuration.text = formatTimecode(comp.duration, comp.frameRate);
-            setRendererUI(comp);
-
-            status.text = "Valores carregados de: " + comp.name;
-            refreshSelectionText();
-        };
 
         btnApply.onClick = function () {
             var comps = getSelectedComps();
@@ -1087,8 +1322,8 @@
     function buildDuplicaTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
         var pnlNaming = uiSection(tab, "Nome das cópias");
         pnlNaming.orientation = "column";
@@ -2135,19 +2370,21 @@
     function buildExplodeTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
-        var splitPanel = uiSection(tab, "Dividir");
+        // Duas colunas: o que dividir | opções
+        var cols = tab.add("group");
+        cols.orientation = "row";
+        cols.alignChildren = ["fill", "top"];
+        cols.spacing = 10;
+
+        var splitPanel = uiSection(cols, "Dividir");
         splitPanel.orientation = "column";
         splitPanel.alignChildren = ["fill", "top"];
+        splitPanel.parent.preferredSize.width = 60;
 
-        var rowMode = splitPanel.add("group");
-        rowMode.orientation = "row";
-
-        uiLabel(rowMode, "Dividir em:");
-
-        var ddMode = rowMode.add(
+        var ddMode = splitPanel.add(
             "dropdownlist",
             undefined,
             [
@@ -2159,45 +2396,41 @@
             ]
         );
         ddMode.selection = 0;
-        ddMode.alignment = ["fill", "center"];
+        uiFlex(ddMode);
+        ddMode.helpTip = "Dividir em";
 
         var customGroup = splitPanel.add("group");
         customGroup.orientation = "row";
+        customGroup.alignChildren = ["fill", "center"];
+        customGroup.spacing = 4;
 
-        var customLabel = customGroup.add("statictext", undefined, "Valor:");
+        var customLabel = uiLabel(customGroup, "Valor:");
 
         var txtCustom = customGroup.add("edittext", undefined, "");
         uiFlex(txtCustom);
-        txtCustom.alignment = ["fill", "center"];
 
-        var optionsPanel = uiSection(tab, "Opções");
+        var optionsPanel = uiSection(cols, "Opções");
         optionsPanel.orientation = "column";
-        optionsPanel.alignChildren = ["left", "top"];
+        optionsPanel.alignChildren = ["fill", "top"];
+        optionsPanel.parent.preferredSize.width = 60;
 
-        var cbDelete = optionsPanel.add(
-            "checkbox",
-            undefined,
-            "Excluir camada original"
-        );
+        var cbDelete = uiFlex(optionsPanel.add("checkbox", undefined, "Excluir original"));
+        cbDelete.helpTip = "Excluir camada original";
 
-        var cbRTL = optionsPanel.add(
-            "checkbox",
-            undefined,
-            "Texto RTL (direita para esquerda)"
-        );
+        var cbRTL = uiFlex(optionsPanel.add("checkbox", undefined, "Texto RTL"));
+        cbRTL.helpTip = "Texto RTL (direita para esquerda)";
 
-        var orderRow = optionsPanel.add("group");
-        orderRow.orientation = "row";
-        uiLabel(orderRow, "Ordem das layers:");
-
-        var ddOrder = orderRow.add(
+        var ddOrder = optionsPanel.add(
             "dropdownlist",
             undefined,
             ["De cima para baixo", "De baixo para cima"]
         );
         ddOrder.selection = 0;
+        uiFlex(ddOrder);
+        ddOrder.helpTip = "Ordem das layers:";
 
-        var btnApply = uiButton(tab, "EXPLODIR TEXTO", {primary: true});
+        var btnApply = uiIconButton(tab, {icon: "explode", label: "EXPLODIR TEXTO", primary: true, height: 24});
+        btnApply.alignment = ["fill", "top"];
 
         var status = addStatus(tab, "Selecione uma ou mais camadas de texto.");
 
@@ -2270,53 +2503,55 @@
     function build3DTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
-        var info = uiFlex(uiLabel(tab, "Comps selecionadas no Project (ou a comp aberta)."));
-        info.helpTip = "Se nada estiver selecionado no Project, age na comp que está aberta.";
+        // opções numa linha só
+        var optRow = tab.add("group");
+        optRow.orientation = "row";
+        optRow.alignChildren = ["fill", "center"];
+        optRow.spacing = 6;
 
-        var optionsPanel = uiSection(tab, "Opções");
-        optionsPanel.orientation = "column";
-        optionsPanel.alignChildren = ["left", "top"];
-
-        var recursiveCheckbox = optionsPanel.add("checkbox", undefined, "Processar precomps");
+        var recursiveCheckbox = uiFlex(optRow.add("checkbox", undefined, "Precomps"));
         recursiveCheckbox.value = loadSetting("layersRecursive", "1") === "1";
+        recursiveCheckbox.helpTip = "Processar precomps";
 
-        var lockedCheckbox = optionsPanel.add("checkbox", undefined, "Processar camadas bloqueadas");
+        var lockedCheckbox = uiFlex(optRow.add("checkbox", undefined, "Bloqueadas"));
         lockedCheckbox.value = loadSetting("layersLocked", "1") === "1";
+        lockedCheckbox.helpTip = "Processar camadas bloqueadas";
 
-        // ----- 3D -----
-        var sec3D = uiSection(tab, "Camadas 3D");
-
-        var btns = sec3D.add("group");
-        btns.orientation = "row";
-        btns.alignChildren = ["fill", "center"];
-
-        var make3DButton = uiButton(btns, "ATIVAR 3D", {primary: true});
-        var disable3DButton = uiButton(btns, "DESATIVAR 3D", {height: 32});
-
-        // ----- Motion Blur -----
-        var secMB = uiSection(tab, "Motion Blur");
-
-        var compMBCheckbox = secMB.add(
-            "checkbox",
-            undefined,
-            "Ligar a chave de Motion Blur da comp"
-        );
-        uiFlex(compMBCheckbox);
+        var compMBCheckbox = uiFlex(optRow.add("checkbox", undefined, "Chave da comp"));
         compMBCheckbox.value = loadSetting("mbCompSwitch", "1") === "1";
         compMBCheckbox.helpTip =
-            "Sem a chave da comp ligada, o blur das camadas não aparece no preview nem no render.";
+            "Ligar a chave de Motion Blur da comp. Sem a chave da comp ligada, o blur das camadas não aparece no preview nem no render.";
 
-        var mbBtns = secMB.add("group");
-        mbBtns.orientation = "row";
-        mbBtns.alignChildren = ["fill", "center"];
+        // uma linha por recurso: nome + ligar + desligar (ícones)
+        function toggleRow(label, icon, tipOn, tipOff) {
+            var r = tab.add("group");
+            r.orientation = "row";
+            r.alignChildren = ["fill", "center"];
+            r.spacing = 4;
 
-        var mbOnButton = uiButton(mbBtns, "LIGAR MOTION BLUR", {primary: true});
-        var mbOffButton = uiButton(mbBtns, "DESLIGAR MOTION BLUR", {height: 32});
+            var l = uiLabel(r, label);
+            l.preferredSize.width = 76;
+
+            var on = uiIconButton(r, {icon: icon, label: "Ligar", primary: true, height: 24, tip: tipOn});
+            uiFlex(on, 40);
+            var off = uiIconButton(r, {icon: icon, label: "Desligar", off: true, height: 24, tip: tipOff});
+            uiFlex(off, 40);
+            return {on: on, off: off};
+        }
+
+        var row3D = toggleRow("Camadas 3D", "cube", "ATIVAR 3D", "DESATIVAR 3D");
+        var make3DButton = row3D.on;
+        var disable3DButton = row3D.off;
+
+        var rowMB = toggleRow("Motion Blur", "blur", "LIGAR MOTION BLUR", "DESLIGAR MOTION BLUR");
+        var mbOnButton = rowMB.on;
+        var mbOffButton = rowMB.off;
 
         var status = addStatus(tab, "Selecione comps no Project.");
+        status.helpTip = "Age nas comps selecionadas no Project. Se nada estiver selecionado, age na comp que está aberta.";
 
         // Câmeras, luzes e camadas só de áudio não têm switch 3D.
         function canBe3D(layer) {
@@ -2451,1356 +2686,6 @@
         disable3DButton.onClick = function () { processSelection(MODES.threeD, false); };
         mbOnButton.onClick = function () { processSelection(MODES.motionBlur, true); };
         mbOffButton.onClick = function () { processSelection(MODES.motionBlur, false); };
-    }
-
-    function getExpressionStoreFile() {
-        var dir = new Folder(Folder.userData.fsName + "/MesmoTools");
-
-        if (!dir.exists) {
-            try {
-                dir.create();
-            } catch (e) {}
-        }
-
-        return new File(dir.fsName + "/expression_favorites.txt");
-    }
-
-    function loadExpressionFavorites() {
-        var out = [];
-        var f = getExpressionStoreFile();
-
-        if (!f.exists) return out;
-
-        try {
-            f.encoding = "UTF-8";
-
-            if (!f.open("r")) return out;
-
-            while (!f.eof) {
-                var line = f.readln();
-
-                if (line === "") continue;
-
-                var tabIndex = line.indexOf("\t");
-                if (tabIndex === -1) continue;
-
-                var nameEnc = line.substring(0, tabIndex);
-                var codeEnc = line.substring(tabIndex + 1);
-
-                try {
-                    out.push({
-                        name: decodeURIComponent(nameEnc),
-                        code: decodeURIComponent(codeEnc)
-                    });
-                } catch (decodeErr) {}
-            }
-
-            f.close();
-        } catch (e) {
-            try { f.close(); } catch (closeErr) {}
-        }
-
-        return out;
-    }
-
-    function saveExpressionFavorites(favorites) {
-        var f = getExpressionStoreFile();
-
-        try {
-            f.encoding = "UTF-8";
-
-            if (!f.open("w")) {
-                throw new Error("Não foi possível abrir o arquivo de favoritos.");
-            }
-
-            for (var i = 0; i < favorites.length; i++) {
-                f.writeln(
-                    encodeURIComponent(favorites[i].name) +
-                    "\t" +
-                    encodeURIComponent(favorites[i].code)
-                );
-            }
-
-            f.close();
-            return true;
-
-        } catch (e) {
-            try { f.close(); } catch (closeErr) {}
-            alert(
-                "Não foi possível salvar os favoritos:\n" +
-                e.toString().replace("Error: ", "") + WRITE_HELP
-            );
-            return false;
-        }
-    }
-
-    function findFavoriteIndex(favorites, name) {
-        for (var i = 0; i < favorites.length; i++) {
-            if (favorites[i].name === name) return i;
-        }
-
-        return -1;
-    }
-
-    function collectSelectedExpressionProperties() {
-        var out = [];
-        var comp = app.project ? app.project.activeItem : null;
-
-        if (!isComp(comp)) return out;
-
-        function addProp(p) {
-            if (!p) return;
-
-            var canSet = false;
-
-            try {
-                canSet = p.canSetExpression === true;
-            } catch (e0) {}
-
-            if (!canSet) return;
-
-            for (var k = 0; k < out.length; k++) {
-                if (out[k] === p) return;
-            }
-
-            out.push(p);
-        }
-
-        try {
-            var compProps = comp.selectedProperties;
-
-            if (compProps && compProps.length) {
-                for (var i = 0; i < compProps.length; i++) {
-                    addProp(compProps[i]);
-                }
-            }
-        } catch (e1) {}
-
-        try {
-            var layers = comp.selectedLayers;
-
-            for (var j = 0; j < layers.length; j++) {
-                var props = layers[j].selectedProperties;
-
-                if (!props) continue;
-
-                for (var p = 0; p < props.length; p++) {
-                    addProp(props[p]);
-                }
-            }
-        } catch (e2) {}
-
-        return out;
-    }
-
-    // ================================================================
-    // BIBLIOTECA DE EXPRESSÕES DO MESMO
-    // Gerada a partir de github.com/francismsmo/After-effects-Expressions.
-    // Cada atalho traz descrição, onde aplicar e um tutorial em comentário.
-    // ================================================================
-
-    var EXPRESSION_LIBRARY = [
-        {
-            name: "Delay do Control — Position",
-            cat: "Delay",
-            target: "Position",
-            desc: "A camada segue a Position do pai (parent) com alguns frames de atraso. Use valores de delay diferentes em cada camada para um efeito em cascata.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   DELAY DO CONTROL — POSITION",
-                "   Aplicar em: Position da camada que vai seguir o Control",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   A camada repete o movimento da camada pai (parent), só que alguns",
-                "   frames atrasada. Dá aquele efeito de \"arrasto\" / follow-through",
-                "   em cascata.",
-                "",
-                "   Como usar:",
-                "   1. Crie uma camada de controle (ex.: um Null chamado \"Control\")",
-                "      e anime a Position dela.",
-                "   2. Faça o parent das camadas que vão seguir para o Control",
-                "      (pick whip do Parent & Link).",
-                "   3. Cole esta expressão na Position de cada camada filha.",
-                "   4. Ajuste delayFrames abaixo. Use valores diferentes em cada",
-                "      camada (3, 6, 9...) para o efeito de cascata.",
-                "",
-                "   Observações:",
-                "   - Sem parent, a camada fica parada no próprio valor.",
-                "   - Funciona melhor com o Control sem rotação e com escala 100%,",
-                "     porque o atraso é somado no espaço do pai.",
-                "   ============================================================ */",
-                "",
-                "var delayFrames = 3; // Ajuste aqui quantos frames de atraso você quer",
-                "var delayTime = framesToTime(delayFrames);",
-                "",
-                "// Definimos o alvo (o seu objeto Control)",
-                "var target = parent;",
-                "",
-                "if (target != null) {",
-                "    // Calculamos onde o Control estava há 'X' frames atrás",
-                "    var delayedPos = target.transform.position.valueAtTime(time - delayTime);",
-                "",
-                "    // Calculamos onde o Control está AGORA",
-                "    var currentPos = target.transform.position.valueAtTime(time);",
-                "",
-                "    // Diferença de movimento (Delta)",
-                "    var delta = delayedPos - currentPos;",
-                "",
-                "    // Aplica o movimento ao valor original da camada (mantendo o layout)",
-                "    value + delta;",
-                "} else {",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Delay do Control — Rotation",
-            cat: "Delay",
-            target: "Rotation",
-            desc: "A camada repete a rotação do pai (parent) com alguns frames de atraso.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   DELAY DO CONTROL — ROTATION",
-                "   Aplicar em: Rotation da camada que vai seguir o Control",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   A camada repete a rotação da camada pai (parent), só que alguns",
-                "   frames atrasada. Dá aquele efeito de \"arrasto\" / follow-through",
-                "   em cascata.",
-                "",
-                "   Como usar:",
-                "   1. Crie uma camada de controle (ex.: um Null chamado \"Control\")",
-                "      e anime a Rotation dela.",
-                "   2. Faça o parent das camadas que vão seguir para o Control",
-                "      (pick whip do Parent & Link).",
-                "   3. Cole esta expressão na Rotation de cada camada filha.",
-                "   4. Ajuste delayFrames abaixo. Use valores diferentes em cada",
-                "      camada (3, 6, 9...) para o efeito de cascata.",
-                "",
-                "   Observações:",
-                "   - Sem parent, a camada fica parada no próprio valor.",
-                "   - Em camadas 3D, aplique na Z Rotation.",
-                "   ============================================================ */",
-                "",
-                "var delayFrames = 3; // Quantos frames de atraso",
-                "var delayTime = framesToTime(delayFrames);",
-                "var target = parent;",
-                "",
-                "if (target != null) {",
-                "    // Calcula a diferença de rotação do pai",
-                "    var rotaPaiAtrasada = target.transform.rotation.valueAtTime(time - delayTime);",
-                "    var rotaPaiAgora = target.transform.rotation.valueAtTime(time);",
-                "    var delta = rotaPaiAtrasada - rotaPaiAgora;",
-                "",
-                "    // Rotação própria da camada + o atraso do pai",
-                "    value + delta;",
-                "} else {",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Delay do Control — Scale",
-            cat: "Delay",
-            target: "Scale",
-            desc: "A camada repete a escala do pai (parent) com alguns frames de atraso. Ótimo para pops em cascata.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   DELAY DO CONTROL — SCALE",
-                "   Aplicar em: Scale da camada que vai seguir o Control",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   A camada repete a escala da camada pai (parent), só que alguns",
-                "   frames atrasada. Dá aquele efeito de \"arrasto\" / follow-through",
-                "   em cascata.",
-                "",
-                "   Como usar:",
-                "   1. Crie uma camada de controle (ex.: um Null chamado \"Control\")",
-                "      e anime a Scale dela.",
-                "   2. Faça o parent das camadas que vão seguir para o Control",
-                "      (pick whip do Parent & Link).",
-                "   3. Cole esta expressão na Scale de cada camada filha.",
-                "   4. Ajuste delayFrames abaixo. Use valores diferentes em cada",
-                "      camada (3, 6, 9...) para o efeito de cascata.",
-                "",
-                "   Observações:",
-                "   - Sem parent, a camada fica parada no próprio valor.",
-                "   - Funciona melhor com escala uniforme no Control (X = Y)",
-                "     e em animações rápidas, tipo pops.",
-                "   ============================================================ */",
-                "",
-                "var delayFrames = 3; // Quantos frames de atraso",
-                "var delayTime = framesToTime(delayFrames);",
-                "var target = parent;",
-                "",
-                "if (target != null) {",
-                "    // Calcula a diferença de escala do pai",
-                "    var escalaPaiAtrasada = target.transform.scale.valueAtTime(time - delayTime);",
-                "    var escalaPaiAgora = target.transform.scale.valueAtTime(time);",
-                "    var delta = escalaPaiAtrasada - escalaPaiAgora;",
-                "",
-                "    // Escala própria da camada + o atraso do pai",
-                "    value + delta;",
-                "} else {",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Wiggle crescente",
-            cat: "Wiggle",
-            target: "Scale",
-            desc: "Wiggle que começa parado e vai ficando mais forte com o tempo, sem limite. Mantém a proporção da escala.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   WIGGLE CRESCENTE (sem limite)",
-                "   Aplicar em: Scale",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   A intensidade do wiggle começa em 0 e aumenta growthRate a",
-                "   cada segundo. Usa o mesmo valor em X e Y, então a camada",
-                "   pulsa sem distorcer.",
-                "",
-                "   Como usar:",
-                "   1. Cole na Scale da camada.",
-                "   2. growthRate = quanto a intensidade cresce por segundo.",
-                "   3. O 0.5 dentro do wiggle é a frequência (tremidas por segundo).",
-                "",
-                "   Observações:",
-                "   - Conta a partir do início da comp (time = 0). Se a camada",
-                "     começa depois, troque time por (time - inPoint).",
-                "   - Quer um teto? Use o atalho \"Wiggle crescente com limite\".",
-                "   ============================================================ */",
-                "",
-                "// Rate defines how much the wiggle intensity increases per second",
-                "var growthRate = 10;",
-                "var dynamicAmount = time * growthRate;",
-                "",
-                "// Wiggle(frequency, amplitude)",
-                "var w = wiggle(0.5, dynamicAmount);",
-                "",
-                "// Mesmo valor em X e Y = mantém a proporção",
-                "[w[0], w[0]]"
-            ].join("\n")
-        },
-        {
-            name: "Wiggle crescente com limite",
-            cat: "Wiggle",
-            target: "Scale",
-            desc: "Igual ao wiggle crescente, mas para de crescer quando chega no limite.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   WIGGLE CRESCENTE COM LIMITE",
-                "   Aplicar em: Scale",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   A intensidade do wiggle cresce growthRate por segundo até",
-                "   chegar em limit, e daí em diante fica constante. Mantém a",
-                "   proporção da escala.",
-                "",
-                "   Como usar:",
-                "   1. Cole na Scale da camada.",
-                "   2. growthRate = quanto cresce por segundo.",
-                "   3. limit = intensidade máxima.",
-                "      Ex.: growthRate 10 e limit 30 -> chega no máximo em 3 s.",
-                "",
-                "   Observação: conta a partir do início da comp. Se a camada",
-                "   começa depois, troque time por (time - inPoint).",
-                "   ============================================================ */",
-                "",
-                "var growthRate = 10; // Increases by 10 every second",
-                "var limit = 30;      // Intensidade máxima",
-                "",
-                "// This will grow until it hits 30, then stay there",
-                "var dynamicAmount = Math.min(time * growthRate, limit);",
-                "",
-                "var w = wiggle(0.5, dynamicAmount);",
-                "",
-                "// Mesmo valor em X e Y = mantém a proporção",
-                "[w[0], w[0]]"
-            ].join("\n")
-        },
-        {
-            name: "Wiggle diminuindo",
-            cat: "Wiggle",
-            target: "Rotation",
-            desc: "Wiggle que começa forte e vai acalmando até parar. Bom para algo que balança e se estabiliza.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   WIGGLE DIMINUINDO (amortecido)",
-                "   Aplicar em: Rotation (funciona em qualquer propriedade)",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Começa com intensidade startAmount e perde decayRate por",
-                "   segundo até chegar em 0, quando a camada para de tremer.",
-                "",
-                "   Como usar:",
-                "   1. Cole na Rotation da camada.",
-                "   2. startAmount = intensidade inicial (graus, na Rotation).",
-                "   3. decayRate = quanto perde por segundo.",
-                "      Ex.: 30 e 10 -> para totalmente em 3 s.",
-                "",
-                "   Observações:",
-                "   - Em Position e Scale também funciona; o wiggle devolve o",
-                "     valor completo da propriedade.",
-                "   - Conta a partir do início da comp. Se a camada começa",
-                "     depois, troque time por (time - inPoint).",
-                "   ============================================================ */",
-                "",
-                "var startAmount = 30; // Intensidade inicial",
-                "var decayRate = 10;   // Quanto diminui por segundo",
-                "",
-                "// Nunca fica negativo: para em 0",
-                "var dynamicAmount = Math.max(startAmount - (time * decayRate), 0);",
-                "",
-                "// Em Rotation, o wiggle já retorna o valor final direto",
-                "wiggle(0.5, dynamicAmount);"
-            ].join("\n")
-        },
-        {
-            name: "Wiggle em loop",
-            cat: "Wiggle",
-            target: "Qualquer propriedade",
-            desc: "Wiggle que se repete perfeitamente a cada X segundos, sem pulo no ponto do loop. Ideal para vídeos em loop e GIFs.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   WIGGLE EM LOOP PERFEITO",
-                "   Aplicar em: qualquer propriedade (Position, Rotation, Scale...)",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Mistura dois wiggles iguais deslocados de loopTime. O final",
-                "   do ciclo encaixa exatamente no começo, então dá para repetir",
-                "   sem \"pulo\".",
-                "",
-                "   Como usar:",
-                "   1. Cole na propriedade.",
-                "   2. freq = quantas vezes por segundo se mexe.",
-                "   3. amp = tamanho do movimento (px, graus ou %).",
-                "   4. loopTime = duração do loop em segundos. Use a duração",
-                "      da comp (ou uma fração dela) para o loop fechar certinho.",
-                "   ============================================================ */",
-                "",
-                "// --- CONFIGURAÇÕES ---",
-                "freq = 2;       // Frequência (quantas vezes se move por segundo)",
-                "amp = 50;       // Amplitude (distância/tamanho da variação)",
-                "loopTime = 10;  // Duração do loop em segundos",
-                "",
-                "// --- CÁLCULO DO LOOP ---",
-                "t = time % loopTime;",
-                "w1 = wiggle(freq, amp, 1, 0.5, t);",
-                "w2 = wiggle(freq, amp, 1, 0.5, t - loopTime);",
-                "",
-                "// Interpolação entre o primeiro e o segundo wiggle",
-                "linear(t, 0, loopTime, w1, w2);"
-            ].join("\n")
-        },
-        {
-            name: "Wiggle na escala proporcional",
-            cat: "Wiggle",
-            target: "Scale",
-            desc: "Wiggle na Scale sem distorcer: largura e altura variam juntas.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   WIGGLE NA ESCALA MANTENDO A PROPORÇÃO",
-                "   Aplicar em: Scale",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Um wiggle normal na Scale sorteia X e Y separados e a camada",
-                "   \"estica\". Aqui o X é usado nos dois eixos, então ela só cresce",
-                "   e encolhe por igual.",
-                "",
-                "   Como usar:",
-                "   1. Cole na Scale.",
-                "   2. wiggle(5, 30): 5 = frequência (vezes por segundo),",
-                "      30 = intensidade (em %).",
-                "   ============================================================ */",
-                "",
-                "//This Wiggle on Scale keep the aspect ratio the same.",
-                "w = wiggle(5, 30);",
-                "",
-                "// Mesmo valor em X e Y",
-                "[w[0], w[0]]"
-            ].join("\n")
-        },
-        {
-            name: "Revelar texto letra por letra",
-            cat: "Texto",
-            target: "Range Selector > Start",
-            desc: "Revela o texto uma letra por frame, do jeito máquina de escrever. A duração se ajusta sozinha ao tamanho do texto.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   REVELAR TEXTO LETRA POR LETRA",
-                "   Aplicar em: Start do Range Selector de um animator de Opacity",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Anima o Start de 0 a 100 em tantos frames quantas letras o",
-                "   texto tiver: 1 letra por frame. Se o texto muda, a duração",
-                "   acompanha.",
-                "",
-                "   Como usar:",
-                "   1. Na camada de texto: Animate > Opacity.",
-                "   2. No animator criado, coloque Opacity = 0%.",
-                "   3. Abra o Range Selector 1 e cole esta expressão no Start.",
-                "   4. O texto aparece da esquerda para a direita.",
-                "",
-                "   Dicas:",
-                "   - Mais lento: troque framesToTime(numChars) por",
-                "     framesToTime(numChars * 2) (2 frames por letra).",
-                "   - Começa no início da comp. Para começar quando a camada",
-                "     entra, troque time por (time - inPoint).",
-                "   ============================================================ */",
-                "",
-                "//Inserir seguinte animação - Opacity 0% e inserir esse código no Start",
-                "",
-                "var numChars = text.sourceText.length;  // quantas letras o texto tem",
-                "var finalTime = framesToTime(numChars); // 1 frame por letra",
-                "linear(time, 0, finalTime, 0, 100);"
-            ].join("\n")
-        },
-        {
-            name: "Encadear texto APOIO depois do PRINCIPAL",
-            cat: "Texto",
-            target: "Range Selector > Start (camada APOIO)",
-            desc: "Faz a animação da camada APOIO começar sozinha assim que a camada PRINCIPAL termina de animar (Start chega em 100).",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   ENCADEAR TEXTO: APOIO COMEÇA QUANDO O PRINCIPAL TERMINA",
-                "   Aplicar em: Start do Range Selector da camada APOIO",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Fica olhando o Start do Range Selector da camada PRINCIPAL.",
-                "   Quando ele chega em 100 (animação terminou), o Start da APOIO",
-                "   vai de 0 a 100 em 15 frames. Se você mudar o timing do",
-                "   PRINCIPAL, a APOIO acompanha sozinha.",
-                "",
-                "   Como usar:",
-                "   1. Tenha duas camadas de texto chamadas PRINCIPAL e APOIO,",
-                "      cada uma com \"Animator 1\" > \"Range Selector 1\".",
-                "   2. Anime (ou use expressão) no Start da PRINCIPAL indo até 100.",
-                "   3. Cole esta expressão no Start do Range Selector da APOIO.",
-                "   4. Ajuste a duração em framesToTime(15).",
-                "",
-                "   Observações:",
-                "   - Os nomes das camadas, do animator e do selector precisam",
-                "     ser exatamente esses. Se renomear, troque aqui também.",
-                "   - A expressão procura para trás frame a frame; em comps muito",
-                "     longas pode deixar o preview um pouco mais lento.",
-                "   ============================================================ */",
-                "",
-                "// Aplicar no Start do Range Selector da camada APOIO",
-                "// A animação começa quando o Start da camada PRINCIPAL chega a 100.",
-                "",
-                "var anterior = thisComp",
-                "    .layer(\"PRINCIPAL\")",
-                "    .text",
-                "    .animator(\"Animator 1\")",
-                "    .selector(\"Range Selector 1\")",
-                "    .start;",
-                "",
-                "var duracao = framesToTime(15); // duração da animação da APOIO",
-                "",
-                "if (anterior < 100){",
-                "    0; // PRINCIPAL ainda animando: APOIO espera",
-                "}else{",
-                "    var inicio = time;",
-                "",
-                "    // Volta no tempo até achar o frame em que o PRINCIPAL chegou a 100",
-                "    for (var t = time; t >= 0; t -= thisComp.frameDuration){",
-                "        var v = thisComp",
-                "            .layer(\"PRINCIPAL\")",
-                "            .text",
-                "            .animator(\"Animator 1\")",
-                "            .selector(\"Range Selector 1\")",
-                "            .start",
-                "            .valueAtTime(t);",
-                "",
-                "        if (v < 100){",
-                "            inicio = t + thisComp.frameDuration;",
-                "            break;",
-                "        }",
-                "    }",
-                "",
-                "    // A partir dali, anima de 0 a 100",
-                "    linear(time, inicio, inicio + duracao, 0, 100);",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Contador com 2 dígitos (00–99)",
-            cat: "Números",
-            target: "Source Text",
-            desc: "Mostra o valor de um Slider como número inteiro com zero à esquerda (00, 01... 10). Para contadores e placares.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   CONTADOR COM 2 DÍGITOS (00, 01, 02... 10, 11...)",
-                "   Aplicar em: Source Text de uma camada de texto",
-                "   Precisa de: efeito \"Slider Control\" na mesma camada",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Arredonda o valor do Slider e coloca um zero na frente dos",
-                "   números menores que 10.",
-                "",
-                "   Como usar:",
-                "   1. Na camada de texto, adicione Effect > Expression Controls",
-                "      > Slider Control (o painel cria sozinho se faltar).",
-                "   2. Cole esta expressão no Source Text.",
-                "   3. Anime o Slider (ex.: de 0 a 10) e o texto conta.",
-                "   ============================================================ */",
-                "",
-                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
-                "",
-                "// Menor que 10 ganha um zero na frente",
-                "if (s < 10) { \"0\" + s } else { s.toString() }"
-            ].join("\n")
-        },
-        {
-            name: "Contador com 6 dígitos (000.000)",
-            cat: "Números",
-            target: "Source Text",
-            desc: "Mostra o valor de um Slider com 6 dígitos e ponto de milhar (000.000). Para contadores de views, valores, etc.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   CONTADOR COM 6 DÍGITOS (000.000)",
-                "   Aplicar em: Source Text de uma camada de texto",
-                "   Precisa de: efeito \"Slider Control\" na mesma camada",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Arredonda o Slider, completa com zeros até 6 dígitos e põe um",
-                "   ponto no meio. Ex.: 1234 -> \"001.234\".",
-                "",
-                "   Como usar:",
-                "   1. Adicione um Slider Control na camada de texto (o painel",
-                "      cria sozinho se faltar).",
-                "   2. Cole esta expressão no Source Text.",
-                "   3. Anime o Slider de 0 até o valor final (máx. 999999).",
-                "",
-                "   Observação: números negativos e acima de 999.999 não cabem",
-                "   no formato.",
-                "   ============================================================ */",
-                "",
-                "s = Math.round(effect(\"Slider Control\")(\"Slider\"));",
-                "",
-                "// Completa com zeros à esquerda e pega os 6 últimos dígitos",
-                "txt = (\"000000\" + s).slice(-6);",
-                "",
-                "// Ponto separando os milhares",
-                "txt.slice(0, 3) + \".\" + txt.slice(3);"
-            ].join("\n")
-        },
-        {
-            name: "Timecode de câmera (00:00:SS:FF)",
-            cat: "Números",
-            target: "Source Text",
-            desc: "Simula o timecode de câmera a partir de um Slider que conta frames (30 fps): mostra 00:00:segundos:frames.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   TIMECODE DE CÂMERA (00:00:SS:FF a 30 fps)",
-                "   Aplicar em: Source Text de uma camada de texto",
-                "   Precisa de: efeito \"Slider Control\" na mesma camada",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   O Slider é um contador de FRAMES. A expressão divide por 30 e",
-                "   mostra segundos e frames no formato de timecode de câmera:",
-                "   \"00:00:\" fixo + SS:FF.",
-                "   (No código, \"minutos\" guarda os segundos e \"segundos\" guarda",
-                "   os frames.)",
-                "",
-                "   Como usar:",
-                "   1. Adicione um Slider Control na camada de texto (o painel",
-                "      cria sozinho se faltar).",
-                "   2. Cole esta expressão no Source Text.",
-                "   3. Anime o Slider. Ex.: 0 -> 300 em 10 s faz o timecode",
-                "      andar em tempo real a 30 fps.",
-                "      Atalho: no Slider, use a expressão  time * 30",
-                "",
-                "   Dica: para outro fps, troque os dois 30 pelo fps desejado.",
-                "   ============================================================ */",
-                "",
-                "v = Math.floor(effect(\"Slider Control\")(\"Slider\")); // total de frames",
-                "",
-                "minutos = Math.floor(v / 30); // segundos (30 frames = 1 s)",
-                "segundos = v % 30;            // frames que sobram",
-                "",
-                "minTxt = (minutos < 10) ? (\"0\" + minutos) : minutos.toString();",
-                "segTxt = (segundos < 10) ? (\"0\" + segundos) : segundos.toString();",
-                "",
-                "// texto fixo + timecode",
-                "\"00:00:\" + minTxt + \":\" + segTxt;"
-            ].join("\n")
-        },
-        {
-            name: "Caixa reativa — Anchor Point do texto",
-            cat: "Layout",
-            target: "Anchor Point (camada de texto)",
-            desc: "Parte 1 da caixa reativa: centraliza o Anchor Point do texto, para o texto e a caixa ficarem alinhados pelo centro.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   CAIXA REATIVA — PARTE 1: ANCHOR POINT DO TEXTO",
-                "   Aplicar em: Anchor Point da camada de TEXTO",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Coloca o Anchor Point exatamente no centro do texto, seja qual",
-                "   for o tamanho. Assim o texto cresce para os dois lados e fica",
-                "   alinhado com a caixa.",
-                "",
-                "   Como usar (junto com a Parte 2):",
-                "   1. Troque \"nome da camada\" pelo nome da sua camada de texto",
-                "      (pode ser a própria camada: thisLayer também funciona).",
-                "   2. Cole no Anchor Point do texto.",
-                "   3. Na caixa (shape), use o atalho \"Caixa reativa — Size da",
-                "      caixa\".",
-                "   4. Alinhe texto e caixa na mesma posição (ou faça parent).",
-                "   ============================================================ */",
-                "",
-                "///Camada de texto - Anchor Point:",
-                "",
-                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
-                "",
-                "Height = a.height;",
-                "Width = a.width;",
-                "Left = a.left;",
-                "Top = a.top;",
-                "",
-                "// Centro do retângulo do texto",
-                "x = Left + Width / 2;",
-                "y = Top + Height / 2;",
-                "",
-                "[x, y]"
-            ].join("\n")
-        },
-        {
-            name: "Caixa reativa — Size da caixa",
-            cat: "Layout",
-            target: "Rectangle Path > Size (shape da caixa)",
-            desc: "Parte 2 da caixa reativa: a caixa (shape) muda de tamanho sozinha conforme o texto, com margem controlada por um Slider.",
-            needs: ["Slider Control"],
-            code: [
-                "/* ============================================================",
-                "   CAIXA REATIVA — PARTE 2: SIZE DA CAIXA",
-                "   Aplicar em: Size do Rectangle Path da camada de SHAPE (caixa)",
-                "   Precisa de: efeito \"Slider Control\" na camada da caixa",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Lê o tamanho do texto e faz o retângulo ter esse tamanho mais",
-                "   uma margem (o valor do Slider). Mudou o texto, a caixa",
-                "   acompanha.",
-                "",
-                "   Como usar:",
-                "   1. Crie um retângulo (shape layer > Rectangle).",
-                "   2. Adicione um Slider Control na camada da caixa (o painel",
-                "      cria sozinho se faltar). Ele é a margem em px.",
-                "   3. Troque \"nome da camada\" pelo nome da camada de texto.",
-                "   4. Cole no Size do Rectangle Path.",
-                "   5. Use a Parte 1 no Anchor Point do texto para centralizar.",
-                "",
-                "   Dica: a margem é somada no total; com Slider 40 sobram 20 px",
-                "   de cada lado.",
-                "   ============================================================ */",
-                "",
-                "///Camada da Box - Size dentro dos parâmetros:",
-                "",
-                "a = thisComp.layer(\"nome da camada\").sourceRectAtTime();",
-                "",
-                "Height = a.height;",
-                "Width = a.width;",
-                "",
-                "p = effect(\"Slider Control\")(\"Slider\"); // margem",
-                "x = Width + p;",
-                "y = Height + p;",
-                "",
-                "[x, y]"
-            ].join("\n")
-        },
-        {
-            name: "Tamanho por sliders (Largura/Altura)",
-            cat: "Layout",
-            target: "Rectangle Path > Size",
-            desc: "Controla o tamanho de um retângulo por dois sliders numa camada CONTROLES. Bom para centralizar vários controles num lugar só.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   TAMANHO POR SLIDERS",
-                "   Aplicar em: Size do Rectangle Path (ou qualquer valor [x, y])",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Pega a largura e a altura de dois Sliders numa camada de",
-                "   controle. Várias caixas podem usar os mesmos sliders e mudar",
-                "   juntas.",
-                "",
-                "   Como usar:",
-                "   1. Crie um Null chamado CONTROLES.",
-                "   2. Adicione dois Slider Control nele e renomeie para",
-                "      \"Largura\" e \"Altura\".",
-                "   3. Cole esta expressão no Size do Rectangle Path da caixa.",
-                "   4. Mexa nos sliders do CONTROLES.",
-                "   ============================================================ */",
-                "",
-                "w = thisComp.layer(\"CONTROLES\").effect(\"Largura\")(\"Slider\");",
-                "h = thisComp.layer(\"CONTROLES\").effect(\"Altura\")(\"Slider\");",
-                "",
-                "[w, h]"
-            ].join("\n")
-        },
-        {
-            name: "Escala constante pela câmera (Scale x Z)",
-            cat: "3D",
-            target: "Scale (camada 3D)",
-            desc: "Mantém o tamanho aparente da camada igual mesmo quando ela se aproxima ou se afasta da câmera.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   ESCALA CONSTANTE PELA CÂMERA (Scale x Position Z)",
-                "   Aplicar em: Scale de uma camada 3D",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Calcula a distância entre a camada e a câmera ativa e corrige",
-                "   a escala na mesma proporção. Resultado: a camada parece",
-                "   sempre do mesmo tamanho na tela, mesmo mudando o Z ou com a",
-                "   câmera se movendo. Ótimo para textos, ícones e marcadores",
-                "   que acompanham uma cena 3D.",
-                "",
-                "   Como usar:",
-                "   1. Ligue o 3D da camada e tenha uma câmera na comp.",
-                "   2. Cole esta expressão na Scale.",
-                "   3. A escala fica 100% quando a camada está à distância do",
-                "      Zoom da câmera.",
-                "",
-                "   Observações:",
-                "   - Sem câmera na comp, a escala original é mantida.",
-                "   - Use em camadas sem parent (a posição usada é a local).",
-                "   ============================================================ */",
-                "",
-                "try {",
-                "    // Busca a câmera ativa na composição",
-                "    cam = thisComp.activeCamera;",
-                "",
-                "    // Calcula a distância da câmera até o Ponto de Ancoragem da camada",
-                "    distance = length(sub(position, cam.position));",
-                "",
-                "    // Calcula a distância focal da câmera (ponto onde a escala é 100%)",
-                "    zoom = cam.zoom;",
-                "",
-                "    // Cria o fator de escala invertido",
-                "    scaleFactor = (distance / zoom) * 100;",
-                "",
-                "    // Aplica o fator nos eixos X, Y e Z",
-                "    [scaleFactor, scaleFactor, scaleFactor];",
-                "} catch(err) {",
-                "    // Caso não haja câmera na cena, mantém a escala original para não dar erro",
-                "    value;",
-                "}"
-            ].join("\n")
-        },
-        {
-            name: "Desacelerar até parar",
-            cat: "Movimento",
-            target: "Rotation (ou qualquer valor 1D)",
-            desc: "Movimento que começa rápido e vai freando até parar, como uma roda girando. Física de movimento uniformemente variado.",
-            needs: [],
-            code: [
-                "/* ============================================================",
-                "   DESACELERAR ATÉ PARAR",
-                "   Aplicar em: Rotation (ou qualquer propriedade de 1 valor:",
-                "               opacidade, X Position separado, Slider...)",
-                "   ------------------------------------------------------------",
-                "   O que faz:",
-                "   Simula algo que começa com velocidade vInicial e vai freando",
-                "   (desaceleracao por segundo) até parar, e depois fica parado.",
-                "   Ex.: uma roleta girando e parando.",
-                "",
-                "   Como usar:",
-                "   1. Cole na Rotation da camada.",
-                "   2. vInicial = velocidade no começo (graus por segundo).",
-                "   3. desaceleracao = quanto a velocidade cai por segundo.",
-                "      Ex.: 150 e 20 -> para em 7,5 s, depois de girar 562,5°.",
-                "",
-                "   Observações:",
-                "   - O valor substitui o da propriedade. Para somar à rotação",
-                "     que você já tem, troque a última linha por",
-                "     value + (vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);",
-                "   - Em Position (2D), separe as dimensões e use no X ou no Y.",
-                "   ============================================================ */",
-                "",
-                "var vInicial = 150;     // Velocidade no início",
-                "var desaceleracao = 20; // Quanto diminui por segundo",
-                "var tOriginal = Math.max(0, time); // Garante que o tempo não seja negativo",
-                "",
-                "// 1. Calcula em quanto tempo a velocidade chega a zero",
-                "var tempoParaParar = vInicial / desaceleracao;",
-                "",
-                "// 2. Garante que o tempo usado no cálculo nunca ultrapasse o ponto de parada",
-                "var t = Math.min(tOriginal, tempoParaParar);",
-                "",
-                "// 3. Aplica a fórmula de deslocamento (MUV)",
-                "(vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);"
-            ].join("\n")
-        }
-    ];
-
-    // Caminho de uma propriedade a partir da layer (índices), para reencontrar
-    // a propriedade depois de adicionar efeitos (o AE invalida as referências).
-    function propertyPath(prop) {
-        var path = [];
-        var p = prop;
-
-        while (p.parentProperty) {
-            path.unshift(p.propertyIndex);
-            p = p.parentProperty;
-        }
-
-        return {layer: p, path: path};
-    }
-
-    function resolvePropertyPath(ref) {
-        var p = ref.layer;
-        for (var i = 0; i < ref.path.length; i++) p = p.property(ref.path[i]);
-        return p;
-    }
-
-    // Garante que a layer tenha um Slider Control com esse nome.
-    function ensureSliderControl(layer, name) {
-        var parade = layer.property("ADBE Effect Parade");
-        if (!parade) return false;
-        if (parade.property(name)) return false;
-
-        var fx = parade.addProperty("ADBE Slider Control");
-        fx.name = name;
-        return true;
-    }
-
-    function buildExpressionsTab(tab) {
-        tab.orientation = "column";
-        tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
-
-        var ALL = "Todas";
-        var MINE = "★ Minhas";
-
-        var favorites = loadExpressionFavorites();
-        var shown = [];     // entradas visíveis na lista, na mesma ordem
-        var current = null; // entrada carregada no editor
-        var busy = false;
-
-        // ----- Lista -----
-        var libSec = uiSection(tab, "Atalhos e favoritas");
-
-        var filterRow = libSec.add("group");
-        filterRow.orientation = "row";
-        filterRow.alignChildren = ["fill", "center"];
-
-        var ddCat = filterRow.add("dropdownlist", undefined, []);
-        ddCat.preferredSize.width = 120;
-
-        var txtSearch = filterRow.add("edittext", undefined, "");
-        txtSearch.alignment = ["fill", "center"];
-        txtSearch.helpTip = "Buscar por nome ou descrição";
-
-        var list = libSec.add("listbox", undefined, [], {
-            multiselect: false,
-            numberOfColumns: 2,
-            showHeaders: true,
-            columnTitles: ["Expressão", "Aplicar em"],
-            columnWidths: [230, 150]
-        });
-        list.alignment = ["fill", "fill"];
-        list.preferredSize.height = 170;
-
-        var infoText = libSec.add("statictext", undefined, "", {multiline: true});
-        infoText.alignment = ["fill", "top"];
-        infoText.preferredSize.height = 58;
-        uiColorText(infoText, THEME.textDim);
-
-        // ----- Editor -----
-        var edSec = uiSection(tab, "Expressão");
-
-        var nameRow = edSec.add("group");
-        nameRow.orientation = "row";
-        nameRow.alignChildren = ["fill", "center"];
-
-        uiLabel(nameRow, "Nome:");
-        var txtName = nameRow.add("edittext", undefined, "");
-        txtName.alignment = ["fill", "center"];
-        txtName.characters = 24;
-
-        var txtCode = edSec.add("edittext", undefined, "", {
-            multiline: true,
-            scrolling: true,
-            wantReturn: true
-        });
-        txtCode.alignment = ["fill", "fill"];
-        txtCode.preferredSize.height = 200;
-
-        var manageRow = edSec.add("group");
-        manageRow.orientation = "row";
-        manageRow.alignChildren = ["fill", "center"];
-        manageRow.spacing = 4;
-
-        var btnNew = uiButton(manageRow, "Nova", {tip: "Limpa o editor"});
-        var btnSave = uiButton(manageRow, "Salvar", {tip: "Salva nas suas favoritas (★ Minhas)"});
-        var btnDelete = uiButton(manageRow, "Excluir", {tip: "Exclui uma das suas favoritas"});
-        var btnCapture = uiButton(manageRow, "Capturar", {tip: "Copia a expressão da propriedade selecionada"});
-
-        // ----- Aplicar -----
-        var applySec = uiSection(tab, "Aplicar");
-
-        var cbNeeds = applySec.add("checkbox", undefined, "Criar Slider Control na camada se a expressão precisar");
-        cbNeeds.value = loadSetting("exprCreateControls", "1") === "1";
-
-        var btnApply = uiButton(applySec, "APLICAR NAS PROPRIEDADES SELECIONADAS", {primary: true});
-
-        var status = addStatus(tab, "Clique num atalho para ver o tutorial. Duplo clique aplica direto.");
-
-        // ----- lógica -----
-
-        function allEntries() {
-            var out = [];
-            var i;
-
-            for (i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                var e = EXPRESSION_LIBRARY[i];
-                out.push({
-                    kind: "lib",
-                    name: e.name,
-                    cat: e.cat,
-                    target: e.target,
-                    desc: e.desc,
-                    needs: e.needs,
-                    code: e.code
-                });
-            }
-
-            for (i = 0; i < favorites.length; i++) {
-                out.push({
-                    kind: "user",
-                    name: favorites[i].name,
-                    cat: MINE,
-                    target: "—",
-                    desc: "",
-                    needs: [],
-                    code: favorites[i].code
-                });
-            }
-
-            return out;
-        }
-
-        function refreshCategories() {
-            busy = true;
-            var keep = ddCat.selection ? ddCat.selection.text : loadSetting("exprCategory", ALL);
-            var names = [ALL, MINE];
-            var seen = {};
-
-            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                var c = EXPRESSION_LIBRARY[i].cat;
-                if (!seen["k" + c]) {
-                    seen["k" + c] = true;
-                    names.push(c);
-                }
-            }
-
-            ddCat.removeAll();
-            var pick = 0;
-
-            for (i = 0; i < names.length; i++) {
-                ddCat.add("item", names[i]);
-                if (names[i] === keep) pick = i;
-            }
-
-            ddCat.selection = pick;
-            busy = false;
-        }
-
-        function refreshList(keepName) {
-            var cat = ddCat.selection ? ddCat.selection.text : ALL;
-            var q = trimString(txtSearch.text).toLowerCase();
-            var entries = allEntries();
-
-            busy = true;
-            list.removeAll();
-            shown = [];
-
-            for (var i = 0; i < entries.length; i++) {
-                var e = entries[i];
-
-                if (cat !== ALL && e.cat !== cat) continue;
-
-                if (
-                    q !== "" &&
-                    e.name.toLowerCase().indexOf(q) === -1 &&
-                    e.desc.toLowerCase().indexOf(q) === -1
-                ) {
-                    continue;
-                }
-
-                var item = list.add("item", (e.kind === "user" ? "★ " : "") + e.name);
-                try { item.subItems[0].text = e.target; } catch (eSub) {}
-
-                shown.push(e);
-
-                if (keepName && keepName === e.name) list.selection = item;
-            }
-
-            busy = false;
-        }
-
-        function describe(e) {
-            if (!e) {
-                infoText.text = "";
-                return;
-            }
-
-            if (e.kind === "user") {
-                infoText.text = "Expressão salva por você.";
-                return;
-            }
-
-            infoText.text =
-                e.desc + "\n" +
-                "Aplicar em: " + e.target +
-                (e.needs.length ? "   ·   Precisa de: " + e.needs.join(", ") : "");
-        }
-
-        function loadSelected() {
-            if (busy || !list.selection) return;
-
-            var e = shown[list.selection.index];
-            if (!e) return;
-
-            current = e;
-            txtName.text = e.name;
-            txtCode.text = e.code;
-            describe(e);
-            status.text = (e.kind === "lib" ? "Atalho: " : "Favorita: ") + e.name;
-        }
-
-        function applyCurrentExpression() {
-            var code = txtCode.text;
-
-            if (trimString(code) === "") {
-                alert("A expressão está vazia.");
-                return;
-            }
-
-            var props = collectSelectedExpressionProperties();
-
-            if (props.length === 0) {
-                alert("Selecione uma ou mais propriedades que aceitem expressão.");
-                return;
-            }
-
-            // Só cria controles se a expressão no editor ainda é a do atalho.
-            var needs = (current && current.kind === "lib" && current.code === code) ? current.needs : [];
-            var applied = 0;
-            var created = 0;
-            var errors = [];
-            var warnings = [];
-            var i;
-
-            saveSetting("exprCreateControls", cbNeeds.value ? "1" : "0");
-
-            app.beginUndoGroup("Mesmo Tools - Expressão" + (current ? " " + current.name : ""));
-
-            try {
-                if (needs.length && cbNeeds.value) {
-                    var refs = [];
-                    for (i = 0; i < props.length; i++) refs.push(propertyPath(props[i]));
-
-                    for (i = 0; i < refs.length; i++) {
-                        for (var n = 0; n < needs.length; n++) {
-                            try {
-                                if (ensureSliderControl(refs[i].layer, needs[n])) created++;
-                            } catch (eFx) {}
-                        }
-                    }
-
-                    // Adicionar efeitos invalida as referências: reencontra as propriedades.
-                    props = [];
-                    for (i = 0; i < refs.length; i++) {
-                        try { props.push(resolvePropertyPath(refs[i])); } catch (eRes) {}
-                    }
-                }
-
-                for (i = 0; i < props.length; i++) {
-                    var propName = "Propriedade";
-                    try { propName = props[i].name; } catch (nameErr) {}
-
-                    try {
-                        props[i].expression = code;
-                        applied++;
-
-                        // O AE aceita a expressão mesmo com erro; avisa se ela quebrou.
-                        var exprErr = "";
-                        try { exprErr = props[i].expressionError; } catch (eErr) {}
-                        if (exprErr) warnings.push(propName + ": " + exprErr);
-                    } catch (e) {
-                        errors.push(propName + ": " + e.toString().replace("Error: ", ""));
-                    }
-                }
-            } finally {
-                app.endUndoGroup();
-            }
-
-            status.text =
-                applied + " propriedade(s) atualizada(s)" +
-                (created ? " | " + created + " Slider Control criado(s)" : "") +
-                (errors.length ? " | " + errors.length + " erro(s)" : "") +
-                (warnings.length ? " | " + warnings.length + " com erro de expressão" : "") +
-                ".";
-
-            if (errors.length || warnings.length) {
-                var msg = "";
-                if (errors.length) {
-                    msg += "Não foi possível aplicar em:\n" + errors.join("\n");
-                }
-                if (warnings.length) {
-                    if (msg) msg += "\n\n";
-                    msg += "Aplicada, mas a expressão deu erro em:\n" + warnings.join("\n") +
-                        "\n\nConfira o tutorial no topo da expressão: às vezes falta " +
-                        "renomear uma camada ou criar um controle.";
-                }
-                alert(msg);
-            }
-        }
-
-        ddCat.onChange = function () {
-            if (busy || !ddCat.selection) return;
-            saveSetting("exprCategory", ddCat.selection.text);
-            refreshList(current ? current.name : null);
-        };
-
-        txtSearch.onChanging = function () {
-            refreshList(current ? current.name : null);
-        };
-
-        list.onChange = loadSelected;
-
-        list.onDoubleClick = function () {
-            loadSelected();
-            applyCurrentExpression();
-        };
-
-        btnNew.onClick = function () {
-            current = null;
-            list.selection = null;
-            txtName.text = "";
-            txtCode.text = "";
-            describe(null);
-            status.text = "Nova expressão: escreva ou capture, dê um nome e salve.";
-        };
-
-        btnSave.onClick = function () {
-            var name = trimString(txtName.text);
-            var code = txtCode.text;
-
-            if (name === "") {
-                alert("Dê um nome para a expressão.");
-                return;
-            }
-
-            if (trimString(code) === "") {
-                alert("A expressão está vazia.");
-                return;
-            }
-
-            // Um atalho do Mesmo nunca é sobrescrito: vira uma cópia sua.
-            for (var i = 0; i < EXPRESSION_LIBRARY.length; i++) {
-                if (EXPRESSION_LIBRARY[i].name === name) {
-                    name += " (minha)";
-                    break;
-                }
-            }
-
-            var idx = findFavoriteIndex(favorites, name);
-
-            if (idx === -1) favorites.push({name: name, code: code});
-            else favorites[idx].code = code;
-
-            if (saveExpressionFavorites(favorites)) {
-                current = {kind: "user", name: name, cat: MINE, target: "—", desc: "", needs: [], code: code};
-                txtName.text = name;
-                refreshList(name);
-                describe(current);
-                status.text = "Salva em ★ Minhas: " + name;
-            }
-        };
-
-        btnDelete.onClick = function () {
-            if (current && current.kind === "lib") {
-                alert("Os atalhos do Mesmo não podem ser excluídos. Só as suas favoritas (★ Minhas).");
-                return;
-            }
-
-            var name = trimString(txtName.text);
-            if (name === "" && current) name = current.name;
-
-            var idx = findFavoriteIndex(favorites, name);
-
-            if (idx === -1) {
-                alert("Selecione uma das suas favoritas para excluir.");
-                return;
-            }
-
-            if (!confirm("Excluir a expressão \"" + name + "\"?")) return;
-
-            favorites.splice(idx, 1);
-
-            if (saveExpressionFavorites(favorites)) {
-                current = null;
-                txtName.text = "";
-                txtCode.text = "";
-                describe(null);
-                refreshList(null);
-                status.text = "Expressão excluída: " + name;
-            }
-        };
-
-        btnCapture.onClick = function () {
-            var props = collectSelectedExpressionProperties();
-
-            if (props.length === 0) {
-                alert("Selecione uma propriedade com expressão.");
-                return;
-            }
-
-            var captured = "";
-            try { captured = props[0].expression; } catch (e) {}
-
-            if (trimString(captured) === "") {
-                alert("A primeira propriedade selecionada não tem expressão.");
-                return;
-            }
-
-            current = null;
-            list.selection = null;
-            txtCode.text = captured;
-            describe(null);
-
-            if (trimString(txtName.text) === "") {
-                try { txtName.text = props[0].name; } catch (nameErr) { txtName.text = "Expressão"; }
-            }
-
-            status.text = "Expressão capturada. Dê um nome e salve.";
-        };
-
-        btnApply.onClick = applyCurrentExpression;
-
-        refreshCategories();
-        refreshList(null);
     }
 
     // ================================================================
@@ -4265,8 +3150,8 @@
     function buildCurvesTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 8;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 5;
+        tab.margins = [0, 3, 0, 0];
 
         var ED_RANGE = [-0.6, 1.6];
         var ED_PAD = 12;
@@ -4295,13 +3180,22 @@
         ddCurves.alignment = ["fill", "center"];
         ddCurves.helpTip = "Escolha uma curva: ela já é aplicada nas keyframes selecionadas";
 
-        var btnFav = uiButton(libRow, "★", {width: 28, tip: "Favoritar / desfavoritar (favoritas aparecem no topo)"});
+        var btnFav = uiIconButton(libRow, {icon: "star", tip: "Favoritar / desfavoritar (favoritas aparecem no topo)"});
+        var btnSave = uiIconButton(libRow, {icon: "save", tip: "Salvar a curva do editor na biblioteca (atualiza se o nome já existir)"});
+        var btnDelete = uiIconButton(libRow, {icon: "trash", tip: "Excluir a curva escolhida da biblioteca"});
+
+        // ----- Modo: Clássico | Valor | Velocidade -----
+        var modeSeg = uiSegmented(tab, [
+            {value: "classic", label: "Clássico", icon: "classic", tip: "Easy ease clássico: influência de entrada e saída, velocidade 0"},
+            {value: "value", label: "Valor", icon: "value", tip: "Curva de valor (como o Value Graph)"},
+            {value: "speed", label: "Velocidade", icon: "speed", tip: "Curva de velocidade (como o Speed Graph): alças = influência e speed"}
+        ], function (v) { setMode(v); });
 
         // ----- Editor -----
         var edRow = tab.add("group");
         edRow.orientation = "row";
         edRow.alignChildren = ["left", "top"];
-        edRow.spacing = 8;
+        edRow.spacing = 6;
 
         var editor = edRow.add("group");
         editor.alignment = ["left", "top"];
@@ -4312,24 +3206,16 @@
         edSide.orientation = "column";
         edSide.alignment = ["fill", "top"];
         edSide.alignChildren = ["fill", "top"];
-        edSide.spacing = 5;
+        edSide.spacing = 3;
 
         function sideRow(label) {
             var r = edSide.add("group");
             r.orientation = "row";
             r.alignChildren = ["fill", "center"];
             var l = uiLabel(r, label);
-            l.preferredSize.width = 58;
+            l.preferredSize.width = 54;
             return r;
         }
-
-        // Modo do gráfico: Valor (curva bezier) ou Velocidade (speed graph do AE)
-        var modeRow = sideRow("Gráfico:");
-        modeRow.spacing = 2;
-        var btnModeValue = uiButton(modeRow, "Valor", {tip: "Curva de valor (como o Value Graph)"});
-        var btnModeSpeed = uiButton(modeRow, "Velocidade", {tip: "Curva de velocidade (como o Speed Graph): alças = influência e speed"});
-        uiFlex(btnModeValue, 30);
-        uiFlex(btnModeSpeed, 30);
 
         var txtValues = uiFlex(sideRow("Bezier:").add("edittext", undefined, ""));
         txtValues.helpTip = "x1, y1, x2, y2 — pode colar do cubic-bezier.com. Enter aplica.";
@@ -4344,16 +3230,12 @@
         uiFlex(txtCat);
         txtCat.helpTip = "Digite uma categoria existente ou crie uma nova";
 
-        var manageRow = edSide.add("group");
-        manageRow.orientation = "row";
-        manageRow.alignChildren = ["fill", "center"];
-        manageRow.spacing = 4;
-
-        var btnSave = uiButton(manageRow, "Salvar", {tip: "Salva na biblioteca (atualiza se o nome já existir)"});
-        var btnDelete = uiButton(manageRow, "Excluir");
-
         // ----- Clássico (easy ease com influência ajustável) -----
-        var classicSec = uiSection(tab, "Clássico");
+        var classicSec = tab.add("group");
+        classicSec.orientation = "column";
+        classicSec.alignment = ["fill", "top"];
+        classicSec.alignChildren = ["fill", "top"];
+        classicSec.spacing = 2;
         var classic = {
             "in": parseFloat(loadSetting("classicIn", "33.33")),
             "out": parseFloat(loadSetting("classicOut", "33.33")),
@@ -4380,7 +3262,7 @@
             var c = state.leftButtonPressed ? THEME.accentDown : (state.mouseOver ? THEME.accentHover : THEME.accent);
             var cx = w / 2;
             var cy = h / 2;
-            var r = 6;
+            var r = 5;
 
             if (state.mouseOver) {
                 uiRoundRect(g, 0, 0, w, h, 4);
@@ -4472,10 +3354,10 @@
             var rowC = classicSec.add("group");
             rowC.orientation = "row";
             rowC.alignChildren = ["fill", "center"];
-            rowC.spacing = 6;
+            rowC.spacing = 4;
 
             var glyph = rowC.add("group");
-            glyph.preferredSize = [14, 22];
+            glyph.preferredSize = [12, 20];
             glyph.mesmoGlyph = def.glyph;
             glyph.onDraw = drawGlyph;
             glyph.helpTip = def.tip;
@@ -4490,7 +3372,7 @@
             fld.helpTip = def.tip + " (0,1 a 100)";
 
             var ico = rowC.add("button", undefined, "");
-            ico.preferredSize = [24, 24];
+            ico.preferredSize = [22, 20];
             ico.mesmoSide = def.side;
             ico.onDraw = drawClassicIcon;
             ico.helpTip = "Aplicar " + (def.side === "in" ? "na entrada" : def.side === "out" ? "na saída" : "nos dois lados") + " das keyframes selecionadas";
@@ -4533,7 +3415,9 @@
 
         // ----- desenho do editor -----
 
-        lib.mode = loadSetting("curvesGraph", "value") === "speed" ? "speed" : "value";
+        lib.view = loadSetting("curvesGraph", "value");
+        if (lib.view !== "speed" && lib.view !== "classic") lib.view = "value";
+        lib.mode = lib.view === "speed" ? "speed" : "value";
 
         function edBox() {
             var w = editor.size[0];
@@ -4704,17 +3588,18 @@
         };
 
         function setMode(m) {
-            lib.mode = m;
+            var classicMode = m === "classic";
+            lib.mode = classicMode ? (lib.mode === "speed" ? "speed" : "value") : m;
+            lib.view = m;
             saveSetting("curvesGraph", m);
-            btnModeValue.mesmoPrimary = m === "value";
-            btnModeSpeed.mesmoPrimary = m === "speed";
-            uiRedraw(btnModeValue);
-            uiRedraw(btnModeSpeed);
-            uiRedraw(editor);
-        }
+            modeSeg.select(m, true);
 
-        btnModeValue.onClick = function () { setMode("value"); };
-        btnModeSpeed.onClick = function () { setMode("speed"); };
+            // Clássico troca o editor pelos sliders de influência
+            uiSetShown(edRow, !classicMode);
+            uiSetShown(classicSec, classicMode);
+            uiRedraw(editor);
+            requestRelayout();
+        }
 
         // ----- aplicar ao vivo -----
 
@@ -5097,7 +3982,7 @@
 
         refreshDropdown();
         loadIntoEditor(null);
-        setMode(lib.mode);
+        setMode(lib.view);
 
     }
 
@@ -5625,55 +4510,45 @@
     function buildCreateTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
+        // Uma linha de ícones (o nome aparece ao passar o mouse)
         var KINDS = [
-            [{k: "text", label: "Texto"}, {k: "adjustment", label: "Adjust."}, {k: "nullLayer", label: "Null"}, {k: "solid", label: "Sólido"}],
-            [{k: "shape", label: "Shape"}, {k: "camera", label: "Câmera"}, {k: "light", label: "Luz"}]
+            {k: "text", icon: "text", tip: "Texto: camada de texto"},
+            {k: "adjustment", icon: "adjust", tip: "Adjustment Layer do tamanho da comp"},
+            {k: "nullLayer", icon: "nullLayer", tip: "Null Object"},
+            {k: "solid", icon: "solid", tip: "Sólido do tamanho da comp (escolha a cor)"},
+            {k: "shape", icon: "shape", tip: "Shape Layer vazia"},
+            {k: "camera", icon: "camera", tip: "Câmera centralizada"},
+            {k: "light", icon: "light", tip: "Luz (Point) centralizada"}
         ];
-        var TIPS = {
-            text: "Camada de texto",
-            adjustment: "Adjustment Layer do tamanho da comp",
-            nullLayer: "Null Object",
-            solid: "Sólido do tamanho da comp (escolha a cor)",
-            shape: "Shape Layer vazia",
-            camera: "Câmera centralizada",
-            light: "Luz (Point) centralizada"
-        };
 
         var status;
 
-        for (var r = 0; r < KINDS.length; r++) {
-            var row = tab.add("group");
-            row.orientation = "row";
-            row.alignChildren = ["fill", "center"];
-            row.spacing = 4;
+        var row = tab.add("group");
+        row.orientation = "row";
+        row.alignChildren = ["fill", "center"];
+        row.spacing = 3;
 
-            for (var c = 0; c < 4; c++) {
-                var item = KINDS[r][c];
-                if (!item) {
-                    // espaço vazio para manter a grade
-                    var spacer = row.add("group");
-                    spacer.preferredSize = [30, 26];
-                    spacer.alignment = ["fill", "center"];
-                    continue;
-                }
-
-                var b = uiButton(row, item.label, {height: 26, tip: TIPS[item.k]});
-                uiFlex(b, 30);
-                b.mesmoKind = item.k;
-                b.onClick = function () {
-                    var layer = createLayerOfKind(this.mesmoKind);
-                    if (layer) status.text = "Criada: " + layer.name;
-                };
-            }
+        for (var c = 0; c < KINDS.length; c++) {
+            var b = uiIconButton(row, {icon: KINDS[c].icon, tip: KINDS[c].tip, height: 24});
+            uiFlex(b, 24);
+            b.mesmoKind = KINDS[c].k;
+            b.onClick = function () {
+                var layer = createLayerOfKind(this.mesmoKind);
+                if (layer) status.text = "Criada: " + layer.name;
+            };
         }
 
-        var btnNull = uiButton(tab, "NULL NA POSITION", {
+        var btnNull = uiIconButton(tab, {
+            icon: "nullLayer",
+            label: "NULL NA POSITION",
             primary: true,
+            height: 24,
             tip: "Selecione uma ou mais camadas: cria um null no ponto delas e linka a Position ao null. Várias camadas = um único null que move todas."
         });
+        btnNull.alignment = ["fill", "top"];
 
         status = addStatus(tab, "Clique para criar na comp aberta.");
 
@@ -5708,10 +4583,10 @@
     function buildAnchorTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
-        var CELL = 28;
+        var CELL = 24;
         var NAMES = [
             ["Topo esquerdo", "Topo", "Topo direito"],
             ["Esquerda", "Centro", "Direita"],
@@ -5815,31 +4690,31 @@
             }
         }
 
-        var help = uiFlex(row0.add("statictext", undefined,
-            "Move o Anchor Point para a quina, borda ou centro da camada sem tirá-la do lugar.",
-            {multiline: true}), 60);
-        help.alignment = ["fill", "fill"];
-        uiColorText(help, THEME.textDim);
+        gridBox.helpTip = "Move o Anchor Point para a quina, borda ou centro da camada sem tirá-la do lugar.";
 
-        status = addStatus(tab, "Selecione camadas e clique num ponto.");
+        status = addStatus(tab, "Clique num ponto.");
+        status.helpTip = "Selecione camadas e clique num ponto.";
     }
 
     function buildExtractTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
-        var info = uiFlex(uiLabel(tab, "Separa cada grupo da shape layer em uma camada."), 60);
-        info.helpTip = "Cada grupo do Contents vira uma camada própria, na mesma posição.";
-
-        var cbCenter = uiFlex(tab.add("checkbox", undefined, "Centralizar o anchor de cada peça"));
+        var cbCenter = uiFlex(tab.add("checkbox", undefined, "Centralizar anchor"));
         cbCenter.value = loadSetting("extractCenter", "1") === "1";
+        cbCenter.helpTip = "Centralizar o anchor de cada peça";
 
-        var cbDelete = uiFlex(tab.add("checkbox", undefined, "Apagar a original (senão só esconde)"));
+        var cbDelete = uiFlex(tab.add("checkbox", undefined, "Apagar original"));
         cbDelete.value = loadSetting("extractDelete", "0") === "1";
+        cbDelete.helpTip = "Apagar a original (senão só esconde)";
 
-        var btn = uiButton(tab, "EXTRAIR FORMAS", {primary: true});
+        var btn = uiIconButton(tab, {
+            icon: "explode", label: "EXTRAIR", primary: true, height: 24,
+            tip: "Separa cada grupo da shape layer em uma camada. Cada grupo do Contents vira uma camada própria, na mesma posição."
+        });
+        btn.alignment = ["fill", "top"];
         var status = addStatus(tab, "Selecione shape layers com 2 ou mais grupos.");
 
         btn.onClick = function () {
@@ -5883,15 +4758,32 @@
         };
     }
 
+    // Anchor Point e Extract juntos, lado a lado.
+    function buildAnchorExtractTab(tab) {
+        tab.orientation = "row";
+        tab.alignChildren = ["fill", "top"];
+        tab.spacing = 12;
+        tab.margins = [0, 3, 0, 0];
+
+        var left = uiSection(tab, "Anchor Point");
+        left.parent.alignment = ["left", "top"];
+        var right = uiSection(tab, "Extract");
+        right.parent.preferredSize.width = 60;
+
+        buildAnchorTab(left);
+        buildExtractTab(right);
+    }
+
     function buildBeatsTab(tab) {
         tab.orientation = "column";
         tab.alignChildren = ["fill", "top"];
-        tab.spacing = 6;
-        tab.margins = [0, 6, 0, 0];
+        tab.spacing = 4;
+        tab.margins = [0, 3, 0, 0];
 
         var sensRow = tab.add("group");
         sensRow.orientation = "row";
         sensRow.alignChildren = ["fill", "center"];
+        sensRow.spacing = 4;
 
         uiLabel(sensRow, "Sensibilidade:");
         var sens = sensRow.add("slider", undefined, parseFloat(loadSetting("beatSens", "5")), 1, 10);
@@ -5901,22 +4793,32 @@
         var sensVal = uiLabel(sensRow, "");
         sensVal.preferredSize.width = 22;
 
+        // intervalo + opções na mesma linha
         var gapRow = tab.add("group");
         gapRow.orientation = "row";
         gapRow.alignChildren = ["left", "center"];
+        gapRow.spacing = 4;
 
         uiLabel(gapRow, "Intervalo mínimo:");
         var txtGap = gapRow.add("edittext", undefined, loadSetting("beatGap", "6"));
-        txtGap.characters = 4;
+        txtGap.characters = 3;
         uiLabel(gapRow, "frames");
 
-        var cbClear = uiFlex(tab.add("checkbox", undefined, "Apagar os marcadores antigos da camada"));
+        var optRow = tab.add("group");
+        optRow.orientation = "row";
+        optRow.alignChildren = ["fill", "center"];
+        optRow.spacing = 8;
+
+        var cbClear = uiFlex(optRow.add("checkbox", undefined, "Apagar antigos"));
         cbClear.value = loadSetting("beatClear", "1") === "1";
+        cbClear.helpTip = "Apagar os marcadores antigos da camada";
 
-        var cbNumber = uiFlex(tab.add("checkbox", undefined, "Numerar os marcadores (1, 2, 3...)"));
+        var cbNumber = uiFlex(optRow.add("checkbox", undefined, "Numerar"));
         cbNumber.value = loadSetting("beatNumber", "0") === "1";
+        cbNumber.helpTip = "Numerar os marcadores (1, 2, 3...)";
 
-        var btn = uiButton(tab, "MARCAR BATIDAS", {primary: true});
+        var btn = uiIconButton(tab, {icon: "beats", label: "MARCAR BATIDAS", primary: true, height: 24});
+        btn.alignment = ["fill", "top"];
         var status = addStatus(tab, "Selecione uma camada com áudio.");
 
         function syncSens() {
@@ -5983,8 +4885,8 @@
 
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
-        win.spacing = 6;
-        win.margins = [10, 8, 10, 10];
+        win.spacing = 4;
+        win.margins = [8, 6, 8, 8];
 
         uiHeader(win);
 
@@ -6002,8 +4904,7 @@
                 label: "Camadas", abbr: "Lyr", tip: "Criar camadas, null no atributo, anchor point, extract e batidas",
                 tools: [
                     {label: "Criar", build: buildCreateTab, width: 260},
-                    {label: "Anchor Point", build: buildAnchorTab, width: 240},
-                    {label: "Extract", build: buildExtractTab, width: 250},
+                    {label: "Anchor · Extract", build: buildAnchorExtractTab, width: 300},
                     {label: "Batidas", build: buildBeatsTab, width: 260}
                 ]
             },
@@ -6013,12 +4914,6 @@
                     {label: "Ajustes", build: buildCompsTab, width: 300},
                     {label: "Duplicar", build: buildDuplicaTab, width: 300},
                     {label: "3D / Blur", build: build3DTab, width: 270}
-                ]
-            },
-            {
-                label: "Expressões", abbr: "Expr", tip: "Atalhos de expressões e suas favoritas",
-                tools: [
-                    {label: "Expressões", build: buildExpressionsTab, width: 360, noHeader: true}
                 ]
             }
         ];
@@ -6041,7 +4936,7 @@
             row.orientation = "row";
             row.alignment = ["fill", "fill"];
             row.alignChildren = ["fill", "top"];
-            row.spacing = 12;
+            row.spacing = 10;
 
             var view = {row: row, tools: [], hooks: [], minWide: 0, pendingCollapse: []};
 
@@ -6063,7 +4958,7 @@
                 block.orientation = "column";
                 block.alignment = ["fill", "top"];
                 block.alignChildren = ["fill", "top"];
-                block.spacing = 4;
+                block.spacing = 3;
                 block.mesmoWidth = tool.width;
 
                 var header = tool.noHeader ? null : uiToolHeader(block, tool.label);
@@ -6283,9 +5178,15 @@
             scrollTo(this.value);
         };
 
+        // tudo mais baixo e com menos espaço vazio
+        uiCompact(win);
+
         applyResponsive();
         win.layout.layout(true);
         nav.select(startGroup);
+
+        // ferramentas que trocam de modo (ex.: Curvas > Clássico) reorganizam a aba
+        RELAYOUT_HOOK = relayout;
 
         // Janela flutuante: abre num tamanho confortável, rolando o resto.
         if (win instanceof Window) {

@@ -35,12 +35,10 @@ HEADER_EN = '''/*
     - Animation = Curves + Explode (on the same screen)
     - Layers = Create + Anchor Point + Extract + Beats
     - Comps = Settings + Duplicate + 3D / Blur (on the same screen)
-    - Expressions: ready-made shortcuts + your favorite expressions
 
     Files saved in Folder.userData/MesmoTools/ (shared with the
     Portuguese version):
     - speed_curves.txt          (curves)
-    - expression_favorites.txt  (expressions)
 */
 
 '''
@@ -359,6 +357,30 @@ TR = {
     "\\\":\\n\\n": "\\\":\\n\\n",
     "\\n(linha ": "\\n(line ",
 
+    # ---- v2.14 (interface compacta)
+    "Excluir original": "Delete original",
+    "Texto RTL": "RTL text",
+    "Dividir em": "Split into",
+    "Ligar a chave de Motion Blur da comp. Sem a chave da comp ligada, o blur das camadas não aparece no preview nem no render.": "Also switch the comp's Motion Blur. Without the comp switch on, layer blur shows in neither preview nor render.",
+    "Ligar": "On",
+    "Desligar": "Off",
+    "Precomps": "Precomps",
+    "Bloqueadas": "Locked",
+    "Chave da comp": "Comp switch",
+    "Age nas comps selecionadas no Project. Se nada estiver selecionado, age na comp que está aberta.": "Acts on comps selected in the Project panel. If nothing is selected, acts on the open comp.",
+    "Salvar a curva do editor na biblioteca (atualiza se o nome já existir)": "Save the editor curve to the library (updates if the name exists)",
+    "Excluir a curva escolhida da biblioteca": "Delete the chosen curve from the library",
+    "Easy ease clássico: influência de entrada e saída, velocidade 0": "Classic easy ease: in and out influence, speed 0",
+    "Texto: camada de texto": "Text: text layer",
+    "Apagar original": "Delete original",
+    "Centralizar anchor": "Center anchor",
+    "EXTRAIR": "EXTRACT",
+    "Separa cada grupo da shape layer em uma camada. Cada grupo do Contents vira uma camada própria, na mesma posição.": "Splits each shape-layer group into its own layer, in the same position.",
+    "Apagar antigos": "Delete old",
+    "Numerar": "Number",
+    "Clique num ponto.": "Click a point.",
+    "Anchor · Extract": "Anchor · Extract",
+
     # ---- navegação
     "Animação": "Animation",
     "Curvas de velocidade + Explode de texto": "Speed curves + text Explode",
@@ -452,17 +474,17 @@ def main():
     start = src.index("(function MesmoTools(thisObj) {")
     body = src[start:]
 
-    # 2) biblioteca de expressões em inglês
-    lib_start = body.index("    var EXPRESSION_LIBRARY = [")
-    lib_end = body.index("\n    ];\n", lib_start) + len("\n    ];\n")
-    lib_en = open(LIB_EN, encoding="utf-8").read()
-    if not lib_en.endswith("\n"):
-        lib_en += "\n"
-    # o comentário de abertura da biblioteca (logo acima) também vai em inglês
-    comment_start = body.rfind("    // ================================================================\n    // BIBLIOTECA", 0, lib_start)
-    if comment_start != -1:
-        lib_start = comment_start
-    body = body[:lib_start] + lib_en + body[lib_end:]
+    # 2) biblioteca de expressões em inglês (só se o painel ainda tiver uma)
+    if "    var EXPRESSION_LIBRARY = [" in body:
+        lib_start = body.index("    var EXPRESSION_LIBRARY = [")
+        lib_end = body.index("\n    ];\n", lib_start) + len("\n    ];\n")
+        lib_en = open(LIB_EN, encoding="utf-8").read()
+        if not lib_en.endswith("\n"):
+            lib_en += "\n"
+        comment_start = body.rfind("    // ================================================================\n    // BIBLIOTECA", 0, lib_start)
+        if comment_start != -1:
+            lib_start = comment_start
+        body = body[:lib_start] + lib_en + body[lib_end:]
 
     # 3) strings da interface
     used = set()
@@ -474,11 +496,13 @@ def main():
 
     open(DST, "w", encoding="utf-8").write(result)
 
-    # 4) relatório: strings que ainda parecem português (fora da biblioteca)
+    # 4) relatório: strings que ainda parecem português
     leftovers = []
-    lib_s = result.index("    var EXPRESSION_LIBRARY = [")
-    lib_e = result.index("\n    ];\n", lib_s)
-    check = result[:lib_s] + result[lib_e:]
+    check = result
+    if "    var EXPRESSION_LIBRARY = [" in result:
+        lib_s = result.index("    var EXPRESSION_LIBRARY = [")
+        lib_e = result.index("\n    ];\n", lib_s)
+        check = result[:lib_s] + result[lib_e:]
     for is_code, chunk in split_code_comments(check):
         if not is_code:
             continue
@@ -491,7 +515,7 @@ def main():
 
     unused = sorted(set(TR) - used)
     print("MesmoTools_EN.jsx gerado: %d textos traduzidos." % len(used))
-    if unused:
+    if unused and "-v" in sys.argv:
         print("Entradas da tabela que não apareceram no código (ok se o texto saiu):")
         for s in unused:
             print("   -", s)
