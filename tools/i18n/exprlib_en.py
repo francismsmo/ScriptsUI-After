@@ -1,0 +1,665 @@
+# Generates tools/i18n/expression_library_en.js: the English expression
+# library used by MesmoTools_EN.jsx. Source expressions:
+# github.com/francismsmo/After-effects-Expressions (code preserved,
+# comments and tutorials translated).
+#
+#   python3 tools/i18n/exprlib_en.py
+import json
+import os
+
+LIB = []
+
+
+def add(name, cat, target, desc, code, needs=None):
+    LIB.append(dict(name=name, cat=cat, target=target, desc=desc,
+                    code=code.strip("\n") + "\n", needs=needs or []))
+
+
+DELAY_TUTORIAL = """/* ============================================================
+   CONTROL DELAY — {TITLE}
+   Apply to: {PROP} of the layer that will follow the Control
+   ------------------------------------------------------------
+   What it does:
+   The layer repeats {WHAT} of its parent layer, just a few
+   frames late. Gives that "drag" / follow-through cascade.
+
+   How to use:
+   1. Create a control layer (e.g. a Null named "Control") and
+      animate its {ANIM}.
+   2. Parent the layers that will follow to the Control
+      (Parent & Link pick whip).
+   3. Paste this expression on the {PROP} of each child layer.
+   4. Adjust delayFrames below. Use different values on each
+      layer (3, 6, 9...) for the cascade effect.
+
+   Notes:
+   - Without a parent, the layer stays at its own value.
+   - {NOTE}
+   ============================================================ */
+"""
+
+add("Control Delay — Position", "Delay", "Position",
+    "The layer follows its parent's Position a few frames late. Use different delay values on each layer for a cascade effect.",
+    DELAY_TUTORIAL.format(TITLE="POSITION", PROP="Position", WHAT="the motion", ANIM="Position",
+                          NOTE="Works best with the Control unrotated and at 100% scale,\n     because the delay is added in the parent's space.") + """
+var delayFrames = 3; // How many frames of delay you want
+var delayTime = framesToTime(delayFrames);
+
+// The target (your Control object)
+var target = parent;
+
+if (target != null) {
+    // Where the Control was 'X' frames ago
+    var delayedPos = target.transform.position.valueAtTime(time - delayTime);
+
+    // Where the Control is NOW
+    var currentPos = target.transform.position.valueAtTime(time);
+
+    // Motion difference (delta)
+    var delta = delayedPos - currentPos;
+
+    // Add the motion to the layer's own value (keeps the layout)
+    value + delta;
+} else {
+    value;
+}
+""")
+
+add("Control Delay — Rotation", "Delay", "Rotation",
+    "The layer repeats its parent's rotation a few frames late.",
+    DELAY_TUTORIAL.format(TITLE="ROTATION", PROP="Rotation", WHAT="the rotation", ANIM="Rotation",
+                          NOTE="On 3D layers, apply it to Z Rotation.") + """
+var delayFrames = 3; // How many frames of delay
+var delayTime = framesToTime(delayFrames);
+var target = parent;
+
+if (target != null) {
+    // Parent's rotation difference
+    var rotaPaiAtrasada = target.transform.rotation.valueAtTime(time - delayTime);
+    var rotaPaiAgora = target.transform.rotation.valueAtTime(time);
+    var delta = rotaPaiAtrasada - rotaPaiAgora;
+
+    // Layer's own rotation + the parent's delay
+    value + delta;
+} else {
+    value;
+}
+""")
+
+add("Control Delay — Scale", "Delay", "Scale",
+    "The layer repeats its parent's scale a few frames late. Great for cascading pops.",
+    DELAY_TUTORIAL.format(TITLE="SCALE", PROP="Scale", WHAT="the scale", ANIM="Scale",
+                          NOTE="Works best with uniform scale on the Control (X = Y)\n     and fast animations, like pops.") + """
+var delayFrames = 3; // How many frames of delay
+var delayTime = framesToTime(delayFrames);
+var target = parent;
+
+if (target != null) {
+    // Parent's scale difference
+    var escalaPaiAtrasada = target.transform.scale.valueAtTime(time - delayTime);
+    var escalaPaiAgora = target.transform.scale.valueAtTime(time);
+    var delta = escalaPaiAtrasada - escalaPaiAgora;
+
+    // Layer's own scale + the parent's delay
+    value + delta;
+} else {
+    value;
+}
+""")
+
+add("Growing wiggle", "Wiggle", "Scale",
+    "Wiggle that starts still and gets stronger over time, with no limit. Keeps the scale proportional.",
+    """/* ============================================================
+   GROWING WIGGLE (no limit)
+   Apply to: Scale
+   ------------------------------------------------------------
+   What it does:
+   Wiggle intensity starts at 0 and grows by growthRate every
+   second. It uses the same value for X and Y, so the layer
+   pulses without stretching.
+
+   How to use:
+   1. Paste it on the layer's Scale.
+   2. growthRate = how much the intensity grows per second.
+   3. The 0.5 inside wiggle is the frequency (wiggles per second).
+
+   Notes:
+   - Counts from the start of the comp (time = 0). If the layer
+     starts later, replace time with (time - inPoint).
+   - Want a ceiling? Use the "Growing wiggle with limit" shortcut.
+   ============================================================ */
+
+// Rate defines how much the wiggle intensity increases per second
+var growthRate = 10;
+var dynamicAmount = time * growthRate;
+
+// Wiggle(frequency, amplitude)
+var w = wiggle(0.5, dynamicAmount);
+
+// Same value for X and Y = keeps proportions
+[w[0], w[0]]
+""")
+
+add("Growing wiggle with limit", "Wiggle", "Scale",
+    "Like the growing wiggle, but it stops growing when it reaches the limit.",
+    """/* ============================================================
+   GROWING WIGGLE WITH LIMIT
+   Apply to: Scale
+   ------------------------------------------------------------
+   What it does:
+   Wiggle intensity grows by growthRate per second until it
+   reaches limit, then stays constant. Keeps the scale
+   proportional.
+
+   How to use:
+   1. Paste it on the layer's Scale.
+   2. growthRate = how much it grows per second.
+   3. limit = maximum intensity.
+      E.g. growthRate 10 and limit 30 -> reaches the max in 3 s.
+
+   Note: counts from the start of the comp. If the layer starts
+   later, replace time with (time - inPoint).
+   ============================================================ */
+
+var growthRate = 10; // Increases by 10 every second
+var limit = 30;      // Maximum intensity
+
+// This will grow until it hits 30, then stay there
+var dynamicAmount = Math.min(time * growthRate, limit);
+
+var w = wiggle(0.5, dynamicAmount);
+
+// Same value for X and Y = keeps proportions
+[w[0], w[0]]
+""")
+
+add("Fading wiggle", "Wiggle", "Rotation",
+    "Wiggle that starts strong and calms down until it stops. Good for something that sways and settles.",
+    """/* ============================================================
+   FADING (DAMPED) WIGGLE
+   Apply to: Rotation (works on any property)
+   ------------------------------------------------------------
+   What it does:
+   Starts at startAmount intensity and loses decayRate per
+   second until it reaches 0, when the layer stops shaking.
+
+   How to use:
+   1. Paste it on the layer's Rotation.
+   2. startAmount = starting intensity (degrees, on Rotation).
+   3. decayRate = how much it loses per second.
+      E.g. 30 and 10 -> fully stops in 3 s.
+
+   Notes:
+   - Also works on Position and Scale; wiggle returns the full
+     property value.
+   - Counts from the start of the comp. If the layer starts
+     later, replace time with (time - inPoint).
+   ============================================================ */
+
+var startAmount = 30; // Starting intensity
+var decayRate = 10;   // How much it decreases per second
+
+// Never negative: stops at 0
+var dynamicAmount = Math.max(startAmount - (time * decayRate), 0);
+
+// On Rotation, wiggle already returns the final value
+wiggle(0.5, dynamicAmount);
+""")
+
+add("Looping wiggle", "Wiggle", "Any property",
+    "Wiggle that repeats seamlessly every X seconds, with no jump at the loop point. Ideal for looping videos and GIFs.",
+    """/* ============================================================
+   SEAMLESS LOOPING WIGGLE
+   Apply to: any property (Position, Rotation, Scale...)
+   ------------------------------------------------------------
+   What it does:
+   Blends two identical wiggles offset by loopTime. The end of
+   the cycle matches the start exactly, so it repeats with no
+   "jump".
+
+   How to use:
+   1. Paste it on the property.
+   2. freq = how many times per second it moves.
+   3. amp = size of the motion (px, degrees or %).
+   4. loopTime = loop length in seconds. Use the comp duration
+      (or a fraction of it) so the loop closes perfectly.
+   ============================================================ */
+
+// --- SETTINGS ---
+freq = 2;       // Frequency (how many times it moves per second)
+amp = 50;       // Amplitude (distance/size of the variation)
+loopTime = 10;  // Loop length in seconds
+
+// --- LOOP CALCULATION ---
+t = time % loopTime;
+w1 = wiggle(freq, amp, 1, 0.5, t);
+w2 = wiggle(freq, amp, 1, 0.5, t - loopTime);
+
+// Blend between the first and second wiggle
+linear(t, 0, loopTime, w1, w2);
+""")
+
+add("Proportional scale wiggle", "Wiggle", "Scale",
+    "Wiggle on Scale without stretching: width and height change together.",
+    """/* ============================================================
+   SCALE WIGGLE THAT KEEPS PROPORTIONS
+   Apply to: Scale
+   ------------------------------------------------------------
+   What it does:
+   A regular wiggle on Scale picks X and Y separately and the
+   layer "stretches". Here X is used for both axes, so it only
+   grows and shrinks evenly.
+
+   How to use:
+   1. Paste it on Scale.
+   2. wiggle(5, 30): 5 = frequency (times per second),
+      30 = intensity (in %).
+   ============================================================ */
+
+//This Wiggle on Scale keep the aspect ratio the same.
+w = wiggle(5, 30);
+
+// Same value for X and Y
+[w[0], w[0]]
+""")
+
+add("Reveal text letter by letter", "Text", "Range Selector > Start",
+    "Reveals the text one letter per frame, typewriter style. The duration adapts to the text length.",
+    """/* ============================================================
+   REVEAL TEXT LETTER BY LETTER
+   Apply to: Start of the Range Selector of an Opacity animator
+   ------------------------------------------------------------
+   What it does:
+   Animates Start from 0 to 100 over as many frames as the text
+   has letters: 1 letter per frame. If the text changes, the
+   duration follows.
+
+   How to use:
+   1. On the text layer: Animate > Opacity.
+   2. In the new animator, set Opacity = 0%.
+   3. Open Range Selector 1 and paste this expression on Start.
+   4. The text appears from left to right.
+
+   Tips:
+   - Slower: replace framesToTime(numChars) with
+     framesToTime(numChars * 2) (2 frames per letter).
+   - Starts at the beginning of the comp. To start when the
+     layer comes in, replace time with (time - inPoint).
+   ============================================================ */
+
+//Add an Opacity 0% animator and put this code on Start
+
+var numChars = text.sourceText.length;  // how many letters the text has
+var finalTime = framesToTime(numChars); // 1 frame per letter
+linear(time, 0, finalTime, 0, 100);
+""")
+
+add("Chain APOIO text after PRINCIPAL", "Text", "Range Selector > Start (APOIO layer)",
+    "Makes the APOIO layer's animation start on its own as soon as the PRINCIPAL layer finishes animating (Start reaches 100).",
+    """/* ============================================================
+   CHAINED TEXT: APOIO STARTS WHEN PRINCIPAL FINISHES
+   Apply to: Start of the Range Selector of the APOIO layer
+   ------------------------------------------------------------
+   What it does:
+   Watches the Start of the PRINCIPAL layer's Range Selector.
+   When it reaches 100 (animation done), APOIO's Start goes from
+   0 to 100 in 15 frames. If you change PRINCIPAL's timing,
+   APOIO follows on its own.
+
+   How to use:
+   1. Have two text layers named PRINCIPAL and APOIO, each with
+      "Animator 1" > "Range Selector 1".
+   2. Animate (or use an expression on) PRINCIPAL's Start up to 100.
+   3. Paste this expression on Start of APOIO's Range Selector.
+   4. Adjust the duration in framesToTime(15).
+
+   Notes:
+   - The layer, animator and selector names must match exactly.
+     If you rename them, change them here too.
+   - The expression searches backwards frame by frame; in very
+     long comps it may slow the preview down a bit.
+   ============================================================ */
+
+// Apply to the Start of the APOIO layer's Range Selector
+// The animation starts when the PRINCIPAL layer's Start reaches 100.
+
+var anterior = thisComp
+    .layer("PRINCIPAL")
+    .text
+    .animator("Animator 1")
+    .selector("Range Selector 1")
+    .start;
+
+var duracao = framesToTime(15); // APOIO animation length
+
+if (anterior < 100){
+    0; // PRINCIPAL still animating: APOIO waits
+}else{
+    var inicio = time;
+
+    // Go back in time until the frame where PRINCIPAL reached 100
+    for (var t = time; t >= 0; t -= thisComp.frameDuration){
+        var v = thisComp
+            .layer("PRINCIPAL")
+            .text
+            .animator("Animator 1")
+            .selector("Range Selector 1")
+            .start
+            .valueAtTime(t);
+
+        if (v < 100){
+            inicio = t + thisComp.frameDuration;
+            break;
+        }
+    }
+
+    // From there, animate from 0 to 100
+    linear(time, inicio, inicio + duracao, 0, 100);
+}
+""")
+
+add("2-digit counter (00–99)", "Numbers", "Source Text",
+    "Shows a Slider's value as a whole number with a leading zero (00, 01... 10). For counters and scoreboards.",
+    """/* ============================================================
+   2-DIGIT COUNTER (00, 01, 02... 10, 11...)
+   Apply to: Source Text of a text layer
+   Needs: a "Slider Control" effect on the same layer
+   ------------------------------------------------------------
+   What it does:
+   Rounds the Slider value and adds a zero in front of numbers
+   below 10.
+
+   How to use:
+   1. On the text layer, add Effect > Expression Controls
+      > Slider Control (the panel creates it if missing).
+   2. Paste this expression on Source Text.
+   3. Animate the Slider (e.g. from 0 to 10) and the text counts.
+   ============================================================ */
+
+s = Math.round(effect("Slider Control")("Slider"));
+
+// Below 10 gets a zero in front
+if (s < 10) { "0" + s } else { s.toString() }
+""", needs=["Slider Control"])
+
+add("6-digit counter (000.000)", "Numbers", "Source Text",
+    "Shows a Slider's value with 6 digits and a thousands dot (000.000). For view counters, amounts, etc.",
+    """/* ============================================================
+   6-DIGIT COUNTER (000.000)
+   Apply to: Source Text of a text layer
+   Needs: a "Slider Control" effect on the same layer
+   ------------------------------------------------------------
+   What it does:
+   Rounds the Slider, pads it with zeros to 6 digits and puts a
+   dot in the middle. E.g. 1234 -> "001.234".
+
+   How to use:
+   1. Add a Slider Control to the text layer (the panel creates
+      it if missing).
+   2. Paste this expression on Source Text.
+   3. Animate the Slider from 0 to the final value (max 999999).
+
+   Note: negative numbers and values above 999.999 don't fit
+   the format.
+   ============================================================ */
+
+s = Math.round(effect("Slider Control")("Slider"));
+
+// Pad with zeros on the left and keep the last 6 digits
+txt = ("000000" + s).slice(-6);
+
+// Dot separating the thousands
+txt.slice(0, 3) + "." + txt.slice(3);
+""", needs=["Slider Control"])
+
+add("Camera timecode (00:00:SS:FF)", "Numbers", "Source Text",
+    "Fakes a camera timecode from a Slider that counts frames (30 fps): shows 00:00:seconds:frames.",
+    """/* ============================================================
+   CAMERA TIMECODE (00:00:SS:FF at 30 fps)
+   Apply to: Source Text of a text layer
+   Needs: a "Slider Control" effect on the same layer
+   ------------------------------------------------------------
+   What it does:
+   The Slider is a FRAME counter. The expression divides by 30
+   and shows seconds and frames in camera timecode format:
+   fixed "00:00:" + SS:FF.
+   (In the code, "minutos" holds the seconds and "segundos"
+   holds the frames.)
+
+   How to use:
+   1. Add a Slider Control to the text layer (the panel creates
+      it if missing).
+   2. Paste this expression on Source Text.
+   3. Animate the Slider. E.g. 0 -> 300 over 10 s makes the
+      timecode run in real time at 30 fps.
+      Shortcut: on the Slider, use the expression  time * 30
+
+   Tip: for another fps, replace both 30s with the fps you want.
+   ============================================================ */
+
+v = Math.floor(effect("Slider Control")("Slider")); // total frames
+
+minutos = Math.floor(v / 30); // seconds (30 frames = 1 s)
+segundos = v % 30;            // leftover frames
+
+minTxt = (minutos < 10) ? ("0" + minutos) : minutos.toString();
+segTxt = (segundos < 10) ? ("0" + segundos) : segundos.toString();
+
+// fixed text + timecode
+"00:00:" + minTxt + ":" + segTxt;
+""", needs=["Slider Control"])
+
+add("Reactive box — text Anchor Point", "Layout", "Anchor Point (text layer)",
+    "Reactive box part 1: centers the text's Anchor Point, so text and box line up by the center.",
+    """/* ============================================================
+   REACTIVE BOX — PART 1: TEXT ANCHOR POINT
+   Apply to: Anchor Point of the TEXT layer
+   ------------------------------------------------------------
+   What it does:
+   Puts the Anchor Point exactly at the center of the text,
+   whatever its size. The text grows to both sides and stays
+   aligned with the box.
+
+   How to use (together with Part 2):
+   1. Replace "nome da camada" with your text layer's name
+      (it can be the layer itself: thisLayer also works).
+   2. Paste it on the text's Anchor Point.
+   3. On the box (shape), use the "Reactive box — box Size"
+      shortcut.
+   4. Align text and box at the same position (or parent them).
+   ============================================================ */
+
+///Text layer - Anchor Point:
+
+a = thisComp.layer("nome da camada").sourceRectAtTime();
+
+Height = a.height;
+Width = a.width;
+Left = a.left;
+Top = a.top;
+
+// Center of the text rectangle
+x = Left + Width / 2;
+y = Top + Height / 2;
+
+[x, y]
+""")
+
+add("Reactive box — box Size", "Layout", "Rectangle Path > Size (box shape)",
+    "Reactive box part 2: the box (shape) resizes on its own to fit the text, with padding controlled by a Slider.",
+    """/* ============================================================
+   REACTIVE BOX — PART 2: BOX SIZE
+   Apply to: Size of the Rectangle Path on the SHAPE (box) layer
+   Needs: a "Slider Control" effect on the box layer
+   ------------------------------------------------------------
+   What it does:
+   Reads the text size and makes the rectangle that size plus
+   padding (the Slider value). Change the text, the box follows.
+
+   How to use:
+   1. Create a rectangle (shape layer > Rectangle).
+   2. Add a Slider Control to the box layer (the panel creates
+      it if missing). It is the padding in px.
+   3. Replace "nome da camada" with the text layer's name.
+   4. Paste it on the Rectangle Path's Size.
+   5. Use Part 1 on the text's Anchor Point to center it.
+
+   Tip: the padding is added to the total; with Slider 40 you get
+   20 px on each side.
+   ============================================================ */
+
+///Box layer - Size within the parameters:
+
+a = thisComp.layer("nome da camada").sourceRectAtTime();
+
+Height = a.height;
+Width = a.width;
+
+p = effect("Slider Control")("Slider"); // padding
+x = Width + p;
+y = Height + p;
+
+[x, y]
+""", needs=["Slider Control"])
+
+add("Size from sliders (Width/Height)", "Layout", "Rectangle Path > Size",
+    "Controls a rectangle's size with two sliders on a CONTROLES layer. Good for keeping several controls in one place.",
+    """/* ============================================================
+   SIZE FROM SLIDERS
+   Apply to: Size of the Rectangle Path (or any [x, y] value)
+   ------------------------------------------------------------
+   What it does:
+   Takes width and height from two Sliders on a control layer.
+   Several boxes can use the same sliders and change together.
+
+   How to use:
+   1. Create a Null named CONTROLES.
+   2. Add two Slider Controls to it and rename them
+      "Largura" (width) and "Altura" (height).
+   3. Paste this expression on the box's Rectangle Path Size.
+   4. Move the sliders on CONTROLES.
+   ============================================================ */
+
+w = thisComp.layer("CONTROLES").effect("Largura")("Slider");
+h = thisComp.layer("CONTROLES").effect("Altura")("Slider");
+
+[w, h]
+""")
+
+add("Constant size to camera (Scale x Z)", "3D", "Scale (3D layer)",
+    "Keeps the layer's apparent size the same even when it moves closer to or farther from the camera.",
+    """/* ============================================================
+   CONSTANT SIZE TO CAMERA (Scale x Position Z)
+   Apply to: Scale of a 3D layer
+   ------------------------------------------------------------
+   What it does:
+   Measures the distance between the layer and the active
+   camera and corrects the scale by the same ratio. Result: the
+   layer always looks the same size on screen, even when Z
+   changes or the camera moves. Great for text, icons and
+   markers that follow a 3D scene.
+
+   How to use:
+   1. Turn on the layer's 3D and have a camera in the comp.
+   2. Paste this expression on Scale.
+   3. Scale is 100% when the layer is at the camera's Zoom
+      distance.
+
+   Notes:
+   - With no camera in the comp, the original scale is kept.
+   - Use it on layers without a parent (it uses the local
+     position).
+   ============================================================ */
+
+try {
+    // Get the comp's active camera
+    cam = thisComp.activeCamera;
+
+    // Distance from the camera to the layer's Anchor Point
+    distance = length(sub(position, cam.position));
+
+    // Camera focal distance (where scale is 100%)
+    zoom = cam.zoom;
+
+    // Inverse scale factor
+    scaleFactor = (distance / zoom) * 100;
+
+    // Apply the factor on X, Y and Z
+    [scaleFactor, scaleFactor, scaleFactor];
+} catch(err) {
+    // No camera in the scene: keep the original scale to avoid errors
+    value;
+}
+""")
+
+add("Decelerate to a stop", "Motion", "Rotation (or any 1D value)",
+    "Motion that starts fast and brakes until it stops, like a spinning wheel. Uniformly decelerated motion physics.",
+    """/* ============================================================
+   DECELERATE TO A STOP
+   Apply to: Rotation (or any 1-value property: opacity,
+             separated X Position, Slider...)
+   ------------------------------------------------------------
+   What it does:
+   Simulates something that starts at speed vInicial and brakes
+   (desaceleracao per second) until it stops, then stays still.
+   E.g. a prize wheel spinning and stopping.
+
+   How to use:
+   1. Paste it on the layer's Rotation.
+   2. vInicial = starting speed (degrees per second).
+   3. desaceleracao = how much the speed drops per second.
+      E.g. 150 and 20 -> stops at 7.5 s, after turning 562.5°.
+
+   Notes:
+   - The value replaces the property's. To add it to the
+     rotation you already have, change the last line to
+     value + (vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);
+   - On Position (2D), separate dimensions and use it on X or Y.
+   ============================================================ */
+
+var vInicial = 150;     // Starting speed
+var desaceleracao = 20; // How much it decreases per second
+var tOriginal = Math.max(0, time); // Makes sure time is never negative
+
+// 1. How long until the speed reaches zero
+var tempoParaParar = vInicial / desaceleracao;
+
+// 2. Never let the time used go past the stopping point
+var t = Math.min(tOriginal, tempoParaParar);
+
+// 3. Displacement formula (uniformly varied motion)
+(vInicial * t) - (desaceleracao * Math.pow(t, 2) / 2);
+""")
+
+
+def js(v):
+    return json.dumps(v, ensure_ascii=False)
+
+
+out = ["    // ================================================================",
+       "    // MESMO EXPRESSION LIBRARY (English)",
+       "    // Built from github.com/francismsmo/After-effects-Expressions.",
+       "    // Each shortcut has a description, where to apply it and a tutorial comment.",
+       "    // ================================================================",
+       "",
+       "    var EXPRESSION_LIBRARY = ["]
+for i, e in enumerate(LIB):
+    out.append("        {")
+    out.append("            name: %s," % js(e["name"]))
+    out.append("            cat: %s," % js(e["cat"]))
+    out.append("            target: %s," % js(e["target"]))
+    out.append("            desc: %s," % js(e["desc"]))
+    out.append("            needs: %s," % js(e["needs"]))
+    lines = e["code"].split("\n")
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+    out.append("            code: [")
+    for j, l in enumerate(lines):
+        out.append("                %s%s" % (js(l), "," if j < len(lines) - 1 else ""))
+    out.append("            ].join(\"\\n\")")
+    out.append("        }" + ("," if i < len(LIB) - 1 else ""))
+out.append("    ];")
+
+here = os.path.dirname(os.path.abspath(__file__))
+open(os.path.join(here, "expression_library_en.js"), "w", encoding="utf-8").write("\n".join(out) + "\n")
+print(len(LIB), "expressions")
