@@ -1,0 +1,170 @@
+<title>Mesmo Tools Preview</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #17151c; --chrome: #232028; --chrome-2: #2b2731; --line: #3a3541;
+  --fg: #e7e3ee; --muted: #9a93a6; --accent: #bb99fa; --accent-ink: #1b1424;
+  --panel: #232323; --ctl: #1d1d1d; --ctl-line: #444; --ctl-fg: #d6d6d6;
+  --warn: #f2b56b; --ok: #8fd9a8;
+}
+body { background: var(--bg); color: var(--fg); font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; }
+.page { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; max-width: 1100px; margin: 0 auto; display: grid; gap: 16px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+header.top h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+header.top .ver { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--accent); }
+header.top p { margin: 0; color: var(--muted); font-size: 13px; flex-basis: 100%; max-width: 70ch; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { background: var(--chrome); color: var(--muted); border: 0; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.bar .hint { color: var(--muted); font-size: 12px; }
+.stage { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+
+/* moldura do painel do After */
+.aeframe { background: var(--chrome); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; display: inline-flex; flex-direction: column; max-width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.aeframe .tabbar { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; background: var(--chrome-2); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--fg); }
+.aeframe .tabbar .x { color: var(--muted); }
+.aeframe .tabbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.resizer { position: relative; resize: both; overflow: hidden; width: 380px; height: 640px; min-width: 200px; min-height: 160px; max-width: 100%; background: var(--panel); }
+#host { position: absolute; inset: 0; overflow: hidden; color: var(--ctl-fg); font-size: 12px; user-select: none; }
+
+/* controles nativos emulados (aparência do After) */
+#host * { box-sizing: border-box; }
+.su-box { overflow: visible; }
+.su-text { white-space: nowrap; overflow: hidden; text-overflow: clip; line-height: 17px; font-size: 12px; color: var(--ctl-fg); }
+.su-text.multi { white-space: normal; line-height: 15px; }
+.su-btn { background: #3a3a3a; color: var(--ctl-fg); border: 1px solid #505050; border-radius: 3px; font: inherit; font-size: 12px; padding: 0 6px; cursor: pointer; }
+.su-btn:hover { background: #454545; }
+.su-check { display: flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; cursor: pointer; overflow: hidden; }
+.su-check input { margin: 0; accent-color: var(--accent); width: 13px; height: 13px; }
+.su-edit { background: var(--ctl); color: var(--ctl-fg); border: 1px solid var(--ctl-line); border-radius: 2px; font: inherit; font-size: 12px; padding: 1px 5px; outline: none; }
+textarea.su-edit { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; resize: none; line-height: 1.35; padding: 4px 6px; }
+.su-edit:focus { border-color: var(--accent); }
+.su-dd { background: #2e2e2e; color: var(--ctl-fg); border: 1px solid var(--ctl-line); border-radius: 3px; font: inherit; font-size: 12px; padding: 0 4px; outline: none; }
+.su-dd:focus { border-color: var(--accent); }
+.su-slider { margin: 0; accent-color: var(--accent); }
+.su-scroll { background: #1b1b1b; border-radius: 6px; }
+.su-scroll .su-thumb { position: absolute; left: 2px; right: 2px; background: #555; border-radius: 5px; cursor: grab; }
+.su-scroll.dis .su-thumb { opacity: .25; }
+.dis { opacity: .45; pointer-events: none; }
+.su-draw { cursor: default; }
+
+/* log da timeline simulada */
+.side { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--chrome); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; min-width: 0; }
+.card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+#log { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; max-height: 300px; overflow: auto; display: grid; gap: 4px; }
+#log .l { white-space: pre-wrap; word-break: break-word; border-left: 2px solid var(--line); padding-left: 8px; }
+#log .l.alert { border-color: var(--warn); color: var(--warn); }
+#log .l.undo { border-color: var(--accent); color: var(--fg); }
+#log .l.error { border-color: #ff7a7a; color: #ff9a9a; }
+#log .empty { color: var(--muted); font-family: inherit; }
+.card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+.card ul b { color: var(--fg); font-weight: 600; }
+#toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: #2d2536; color: var(--fg); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 6px; font-size: 13px; max-width: min(560px, calc(100vw - 32px)); white-space: pre-wrap; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Mesmo Tools</h1><span class="ver" id="ver">v—</span>
+    <p>Prévia ao vivo do painel, rodando o mesmo código do .jsx com um After Effects simulado. Arraste o canto inferior direito para redimensionar. Tamanhos e fontes são aproximados.</p>
+  </header>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="Idioma">
+      <button data-lang="pt" aria-pressed="true">Português</button>
+      <button data-lang="en" aria-pressed="false">English</button>
+    </div>
+    <div class="seg" role="group" aria-label="Largura">
+      <button data-w="300">Estreito</button>
+      <button data-w="380" aria-pressed="true">Médio</button>
+      <button data-w="720">Largo</button>
+    </div>
+    <span class="hint">ou arraste o canto do painel</span>
+  </div>
+
+  <div class="stage">
+    <div class="aeframe">
+      <div class="tabbar"><span class="dot"></span><span id="tabname">MesmoTools.jsx</span><span class="x">×</span></div>
+      <div class="resizer" id="resizer"><div id="host"></div></div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>O que o painel fez (simulado)</h2>
+        <div id="log"><span class="empty">Clique nos botões do painel: as ações e avisos aparecem aqui.</span></div>
+      </div>
+      <div class="card">
+        <h2>Projeto simulado</h2>
+        <ul>
+          <li>Comp aberta <b>Storyboard_v3</b>, 1920×1080, 30 fps</li>
+          <li>Camadas: <b>Titulo</b> (texto), <b>Logo</b> (selecionada, Position com 2 keys selecionadas), <b>Icones</b> (shape), <b>Musica</b> (áudio)</li>
+          <li>Avisos e confirmações do After viram linhas no log; confirmações respondem "Sim"</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast" hidden></div>
+
+<script>/*EMU*/</script>
+<script id="src-pt" type="text/plain">/*PT*/</script>
+<script id="src-en" type="text/plain">/*EN*/</script>
+<script>
+(function () {
+  const host = document.getElementById("host");
+  const resizer = document.getElementById("resizer");
+  const logEl = document.getElementById("log");
+  const toast = document.getElementById("toast");
+  let toastT = 0, lang = "pt";
+  try { lang = localStorage.getItem("mt-lang") || "pt"; } catch (e) {}
+
+  function log(msg, kind) {
+    const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
+    const d = document.createElement("div");
+    d.className = "l " + (kind || "");
+    d.textContent = msg;
+    logEl.prepend(d);
+    while (logEl.children.length > 60) logEl.lastChild.remove();
+    if (kind === "alert" || kind === "error") {
+      toast.textContent = msg; toast.hidden = false;
+      clearTimeout(toastT); toastT = setTimeout(() => { toast.hidden = true; }, 3200);
+    }
+  }
+  ScriptUIEmu.onAlert = log;
+
+  function decode(id) { return document.getElementById(id).textContent.replace(/<\\\/script/g, "</script"); }
+
+  function boot() {
+    const src = decode(lang === "en" ? "src-en" : "src-pt");
+    const m = src.match(/SCRIPT_VERSION\s*=\s*"([^"]+)"/) || src.match(/v(\d+\.\d+)/);
+    document.getElementById("ver").textContent = m ? (m[1][0] === "v" ? m[1] : "v" + m[1]) : "";
+    document.getElementById("tabname").textContent = lang === "en" ? "MesmoTools_EN.jsx" : "MesmoTools.jsx";
+    try { ScriptUIEmu.mount(host, src, log); }
+    catch (e) { console.error(e); log("Erro ao abrir o painel: " + e.message, "error"); }
+    document.querySelectorAll("[data-lang]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+  }
+
+  document.querySelectorAll("[data-lang]").forEach((b) => b.addEventListener("click", () => {
+    lang = b.dataset.lang; try { localStorage.setItem("mt-lang", lang); } catch (e) {}
+    boot();
+  }));
+  document.querySelectorAll("[data-w]").forEach((b) => b.addEventListener("click", () => {
+    resizer.style.width = b.dataset.w + "px";
+    document.querySelectorAll("[data-w]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+
+  let raf = 0;
+  new ResizeObserver(() => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      if (ScriptUIEmu.resizeTo) ScriptUIEmu.resizeTo(resizer.clientWidth, resizer.clientHeight);
+    });
+  }).observe(resizer);
+
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(boot, boot);
+})();
+</script>

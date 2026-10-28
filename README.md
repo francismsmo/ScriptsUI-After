@@ -111,3 +111,13 @@ python3 tools/build_en.py          # rebuilds MesmoTools_EN.jsx
 - Always edit `MesmoTools.jsx`, then run `tools/build_en.py`. The UI translations live in the `TR` table inside that script; it fails and lists any Portuguese text left untranslated.
 - Both versions share the same saved curves, favorite expressions and settings.
 - Code comments inside the file stay in Portuguese; everything shown in After Effects is in English.
+
+## Prévia no navegador (para desenvolvimento)
+
+`tools/preview/` roda o mesmo `MesmoTools.jsx` no navegador, com o ScriptUI e um projeto do After simulados, para ver o layout e clicar sem abrir o After:
+
+```
+python3 tools/preview/build_preview.py      # gera tools/preview/MesmoTools_preview.html
+```
+
+É uma aproximação: tamanhos e fontes podem diferir um pouco, e as ações rodam num projeto de mentira.
