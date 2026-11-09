@@ -2,7 +2,7 @@
 
 Um painel só (`MesmoTools.jsx`) com tudo o que eu uso no dia a dia para acelerar o After Effects.
 
-**Versão atual: v2.17** — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
+**Versão atual: v2.18** (testada para o After Effects 2024 a 2027 / 27.0) — o número aparece no cabeçalho do painel. Veja o que mudou em cada versão no [CHANGELOG](CHANGELOG.md).
 
 > **English:** `MesmoTools_EN.jsx` is the same panel with the whole interface in English. Install it the same way. See [English version](#english-version) below.
 
@@ -35,12 +35,38 @@ As cores ficam todas em `THEME`, no começo do arquivo (o destaque padrão é li
 
 ## Instalação
 
+### Jeito fácil: instalador
+
+Baixe o zip da versão (ou a pasta do repositório) e deixe o instalador na mesma pasta que `MesmoTools.jsx` e `MesmoTools_EN.jsx`.
+
+- **Dentro do After (Windows e Mac, recomendado):** *File > Scripts > Run Script File…* e escolha `Instalar Mesmo Tools.jsx`.
+  - Instala na versão do After que está aberta e deixa você escolher Português, English ou os dois.
+  - Liga sozinho *Allow Scripts to Write Files and Access Network*. Se o After não deixar, ele abre a tela de preferências para você marcar.
+  - Se a pasta do programa estiver protegida, instala na pasta de scripts do seu usuário, que o After também lê (não precisa de administrador).
+- **Windows, por fora do After:** dois cliques em `Instalar Mesmo Tools - Windows.bat`. Pede administrador e instala em todas as versões do After em `C:\Program Files\Adobe`.
+- **Mac, por fora do After:** dois cliques em `Instalar Mesmo Tools - Mac.command` (se o macOS bloquear: botão direito > Abrir). Pode pedir a senha do Mac.
+
+Depois, reinicie o After Effects e abra em **Window → MesmoTools.jsx**. Todos os instaladores apagam o `CompManager_Mesmo.jsx` antigo.
+
+### Jeito manual
+
 1. Copie `MesmoTools.jsx` para a pasta de painéis do After Effects:
    - **Windows:** `C:\Program Files\Adobe\Adobe After Effects <versão>\Support Files\Scripts\ScriptUI Panels\`
    - **macOS:** `/Applications/Adobe After Effects <versão>/Scripts/ScriptUI Panels/`
 2. Se você tinha o `CompManager_Mesmo.jsx` instalado, apague ele da pasta (ele foi substituído).
 3. Reinicie o After Effects e abra pelo menu **Window → MesmoTools.jsx**.
 4. Para salvar curvas e expressões, ative **Preferências → Scripting & Expressions → Allow Scripts to Write Files and Access Network**.
+
+### After Effects 27.0 (2027)
+
+Funciona igual. O After 27 só roda em Windows 11 (24H2 ou mais novo) e em Mac com Apple Silicon (macOS 15 ou mais novo); em Mac Intel, continue no After 26.x, onde o painel também funciona.
+
+### Gerar o zip para distribuir
+
+```
+python3 tools/build_en.py         # atualiza a versão em inglês
+python3 tools/build_release.py    # cria dist/MesmoTools-v<versão>.zip
+```
 
 ## Curvas de velocidade
 

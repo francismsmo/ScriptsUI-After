@@ -505,6 +505,10 @@ TR = {
 KEEP = {
     "Ambos os canais",
     "Converter áudio em quadros-chave",
+    "Convertir audio en fotogramas clave",
+    "Convertir l'audio en images clés",
+    "Audio in Keyframes konvertieren",
+    "Converti audio in fotogrammi chiave",
 }
 
 STRING_RE = re.compile(r'"((?:\\.|[^"\\\n])*)"')

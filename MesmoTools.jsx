@@ -12,9 +12,13 @@
     - speed_curves.txt          (curvas)
     - expression_favorites.txt  (expressões)
 
-    Versão atual: v2.17 (mude SCRIPT_VERSION a cada alteração: 2.18, 2.19...)
+    Versão atual: v2.18 (mude SCRIPT_VERSION a cada alteração: 2.19, 2.20...)
     Histórico completo em CHANGELOG.md.
 
+    v2.18 - Pronto para o After Effects 27.0 (2027). Avisos longos são
+            encurtados (o alert do After 27 no Windows corta mensagens
+            grandes) e o Batidas acha o comando de áudio em mais idiomas.
+            Novo instalador (pasta instalador/).
     v2.17 - Align/Distribute embaixo do Anchor Point; botão de resetar a
             curva; Shift trava o eixo no editor de curvas; adicionar e
             excluir expressões suas na aba Expressões.
@@ -64,7 +68,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.17";
+    var SCRIPT_VERSION = "2.18";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -266,6 +270,27 @@
             el.alignment = ["fill", el.alignment && el.alignment[1] ? el.alignment[1] : "center"];
         } catch (e) {}
         return el;
+    }
+
+    /*
+        Aviso do After, mas curto: listas longas são cortadas.
+        No After 27 (Windows), alert() pode cortar mensagens grandes no meio.
+    */
+    function uiAlert(msg) {
+        var text = String(msg);
+        var lines = text.split("\n");
+        var MAX_LINES = 14;
+
+        if (lines.length > MAX_LINES) {
+            var rest = lines.length - (MAX_LINES - 1);
+            lines = lines.slice(0, MAX_LINES - 1);
+            lines.push("… (+" + rest + ")");
+            text = lines.join("\n");
+        }
+
+        if (text.length > 900) text = text.substring(0, 880) + "…";
+
+        alert(text, SCRIPT_NAME);
     }
 
     function uiLabel(parent, text) {
@@ -1303,12 +1328,12 @@
             var comps = getSelectedComps();
 
             if (comps.length === 0) {
-                alert("Selecione pelo menos uma composição no painel Project.");
+                uiAlert("Selecione pelo menos uma composição no painel Project.");
                 return;
             }
 
             if (!cbResize.value && !cbFPS.value && !cbDuration.value && !cbRenderer.value) {
-                alert("Ative pelo menos uma opção para aplicar.");
+                uiAlert("Ative pelo menos uma opção para aplicar.");
                 return;
             }
 
@@ -1326,7 +1351,7 @@
                     newW < 4 || newH < 4 ||
                     newW > 30000 || newH > 30000
                 ) {
-                    alert("W e H precisam ser inteiros entre 4 e 30000 px.");
+                    uiAlert("W e H precisam ser inteiros entre 4 e 30000 px.");
                     return;
                 }
             }
@@ -1335,7 +1360,7 @@
                 try {
                     requestedFPS = getRequestedFPS();
                 } catch (fpsErr) {
-                    alert(fpsErr.toString().replace("Error: ", ""));
+                    uiAlert(fpsErr.toString().replace("Error: ", ""));
                     return;
                 }
             }
@@ -1430,7 +1455,7 @@
                 status.text =
                     success + " atualizada(s), " + errors.length + " com erro.";
 
-                alert(
+                uiAlert(
                     "Processo concluído com alguns erros:\n\n" +
                     errors.join("\n")
                 );
@@ -1677,20 +1702,20 @@
 
         btnRun.onClick = function () {
             if (!app.project) {
-                alert("Nenhum projeto aberto.");
+                uiAlert("Nenhum projeto aberto.");
                 return;
             }
 
             var sel = app.project.selection;
 
             if (!sel || sel.length === 0) {
-                alert("Selecione pelo menos uma composição no Project.");
+                uiAlert("Selecione pelo menos uma composição no Project.");
                 return;
             }
 
             var num = parseInt(copyCount.text, 10);
             if (isNaN(num) || num < 1 || num > 999) {
-                alert("Cópias precisa ser um número entre 1 e 999.");
+                uiAlert("Cópias precisa ser um número entre 1 e 999.");
                 return;
             }
 
@@ -1700,7 +1725,7 @@
             }
 
             if (valid.length === 0) {
-                alert("A seleção não contém composições.");
+                uiAlert("A seleção não contém composições.");
                 return;
             }
 
@@ -2360,7 +2385,7 @@
         var comp = app.project ? app.project.activeItem : null;
 
         if (!isComp(comp)) {
-            alert("Abra uma composição e selecione uma ou mais camadas de texto.");
+            uiAlert("Abra uma composição e selecione uma ou mais camadas de texto.");
             return {pieces: 0, skipped: 0, failed: 0, keptOriginals: 0};
         }
 
@@ -2372,7 +2397,7 @@
         }
 
         if (textLayers.length === 0) {
-            alert("Nenhuma camada de texto selecionada.");
+            uiAlert("Nenhuma camada de texto selecionada.");
             return {pieces: 0, skipped: selected.length, failed: 0, keptOriginals: 0};
         }
 
@@ -2393,7 +2418,7 @@
 
                 if (unsupported) {
                     skipped++;
-                    alert("'" + layer.name + "' foi ignorada: " + unsupported);
+                    uiAlert("'" + layer.name + "' foi ignorada: " + unsupported);
                     continue;
                 }
 
@@ -2405,7 +2430,7 @@
                     );
                 } catch (segErr) {
                     skipped++;
-                    alert(
+                    uiAlert(
                         "Erro em '" + layer.name + "':\n" +
                         segErr.toString().replace("Error: ", "")
                     );
@@ -2589,7 +2614,7 @@
                  mode === "custom regular expression") &&
                 txtCustom.text === ""
             ) {
-                alert(
+                uiAlert(
                     mode === "custom word"
                         ? "Digite a palavra que deseja isolar."
                         : "Digite uma expressão regular."
@@ -2615,7 +2640,7 @@
                 ".";
 
             if (result.keptOriginals) {
-                alert(
+                uiAlert(
                     "Algumas peças não puderam ser criadas, então " +
                     result.keptOriginals +
                     " camada(s) original(is) foram mantidas para você não perder o texto."
@@ -2728,14 +2753,14 @@
 
         function processSelection(mode, enable) {
             if (!app.project) {
-                alert("Nenhum projeto aberto.");
+                uiAlert("Nenhum projeto aberto.");
                 return;
             }
 
             var comps = targetComps();
 
             if (comps.length === 0) {
-                alert("Selecione pelo menos uma composição no Project (ou abra uma comp).");
+                uiAlert("Selecione pelo menos uma composição no Project (ou abra uma comp).");
                 return;
             }
 
@@ -2888,7 +2913,7 @@
 
         } catch (e) {
             try { f.close(); } catch (closeErr) {}
-            alert(
+            uiAlert(
                 "Não foi possível salvar os favoritos:\n" +
                 e.toString().replace("Error: ", "") + WRITE_HELP
             );
@@ -4264,13 +4289,13 @@
         function apply() {
             var e = current();
             if (!e) {
-                alert("Escolha uma expressão na lista.");
+                uiAlert("Escolha uma expressão na lista.");
                 return;
             }
 
             var comp = app.project ? app.project.activeItem : null;
             if (!isComp(comp)) {
-                alert("Abra uma composição.");
+                uiAlert("Abra uma composição.");
                 return;
             }
 
@@ -4284,7 +4309,7 @@
 
             if (res.applied === 0 && res.msg) {
                 status.text = res.msg;
-                alert(res.msg);
+                uiAlert(res.msg);
                 return;
             }
 
@@ -4300,7 +4325,7 @@
                     if (msg) msg += "\n\n";
                     msg += "Aplicada, mas a expressão deu erro em:\n" + res.warnings.join("\n");
                 }
-                alert(msg);
+                uiAlert(msg);
             }
         }
 
@@ -4345,11 +4370,11 @@
             var code = txtCode.text;
 
             if (name === "") {
-                alert("Dê um nome para a expressão.");
+                uiAlert("Dê um nome para a expressão.");
                 return;
             }
             if (trimString(code) === "") {
-                alert("Cole o código da expressão.");
+                uiAlert("Cole o código da expressão.");
                 return;
             }
 
@@ -4380,7 +4405,7 @@
         btnDel.onClick = function () {
             var e = current();
             if (!e || !e.mine) {
-                alert("Escolha uma expressão sua (★ Minhas) para excluir. Os atalhos do Mesmo não podem ser excluídos.");
+                uiAlert("Escolha uma expressão sua (★ Minhas) para excluir. Os atalhos do Mesmo não podem ser excluídos.");
                 return;
             }
 
@@ -4557,7 +4582,7 @@
             return true;
         } catch (e) {
             try { f.close(); } catch (closeErr) {}
-            alert(
+            uiAlert(
                 "Não foi possível salvar as curvas:\n" +
                 e.toString().replace("Error: ", "") + WRITE_HELP
             );
@@ -5633,7 +5658,7 @@
             var v = parseCurveValues(txtValues.text);
 
             if (!v) {
-                alert("Use 4 números: x1, y1, x2, y2 (ex.: 0.4, 0, 0.2, 1).");
+                uiAlert("Use 4 números: x1, y1, x2, y2 (ex.: 0.4, 0, 0.2, 1).");
                 syncEditorFields();
                 return;
             }
@@ -5657,7 +5682,7 @@
             var cat = trimString(txtCat.text) || "Minhas";
 
             if (name === "") {
-                alert("Dê um nome para a curva.");
+                uiAlert("Dê um nome para a curva.");
                 return;
             }
 
@@ -5700,7 +5725,7 @@
         btnFav.onClick = function () {
             var idx = lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
             if (idx === -1) {
-                alert("Escolha (ou salve) uma curva da biblioteca primeiro.");
+                uiAlert("Escolha (ou salve) uma curva da biblioteca primeiro.");
                 return;
             }
 
@@ -5714,7 +5739,7 @@
         btnDelete.onClick = function () {
             var idx = lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
             if (idx === -1) {
-                alert("Escolha uma curva da biblioteca para excluir.");
+                uiAlert("Escolha uma curva da biblioteca para excluir.");
                 return;
             }
 
@@ -5743,7 +5768,7 @@
     function activeCompOrAlert() {
         var comp = app.project ? app.project.activeItem : null;
         if (!isComp(comp)) {
-            alert("Abra uma composição primeiro.");
+            uiAlert("Abra uma composição primeiro.");
             return null;
         }
         return comp;
@@ -6207,10 +6232,18 @@
         selectOnly(comp, [layer]);
         try { comp.openInViewer(); } catch (eV) {}
 
+        // O nome do comando muda com o idioma do After: tenta os mais comuns.
+        var MENU_NAMES = [
+            "Convert Audio to Keyframes",
+            "Converter áudio em quadros-chave",
+            "Convertir audio en fotogramas clave",
+            "Convertir l'audio en images clés",
+            "Audio in Keyframes konvertieren",
+            "Converti audio in fotogrammi chiave"
+        ];
         var cmd = 0;
-        try { cmd = app.findMenuCommandId("Convert Audio to Keyframes"); } catch (eC) {}
-        if (!cmd) {
-            try { cmd = app.findMenuCommandId("Converter áudio em quadros-chave"); } catch (eC2) {}
+        for (var mi = 0; mi < MENU_NAMES.length && !cmd; mi++) {
+            try { cmd = app.findMenuCommandId(MENU_NAMES[mi]); } catch (eC) { cmd = 0; }
         }
         if (!cmd) throw new Error("Não achei o comando \"Convert Audio to Keyframes\" do After.");
 
@@ -6307,7 +6340,7 @@
 
             var layers = layersForNull(comp);
             if (layers.length === 0) {
-                alert("Selecione uma ou mais camadas.");
+                uiAlert("Selecione uma ou mais camadas.");
                 return;
             }
 
@@ -6317,7 +6350,7 @@
                 nul = createPositionNull(comp, layers);
                 selectOnly(comp, [nul]);
             } catch (e) {
-                alert("Não foi possível criar o null:\n" + e.toString().replace("Error: ", ""));
+                uiAlert("Não foi possível criar o null:\n" + e.toString().replace("Error: ", ""));
             } finally {
                 app.endUndoGroup();
             }
@@ -6405,7 +6438,7 @@
 
             var layers = comp.selectedLayers;
             if (layers.length === 0) {
-                alert("Selecione uma ou mais camadas.");
+                uiAlert("Selecione uma ou mais camadas.");
                 return;
             }
 
@@ -6472,7 +6505,7 @@
 
             var layers = comp.selectedLayers;
             if (layers.length === 0) {
-                alert("Selecione uma ou mais shape layers.");
+                uiAlert("Selecione uma ou mais shape layers.");
                 return;
             }
 
@@ -6503,7 +6536,7 @@
             }
 
             status.text = total + " camada(s) criada(s)" + (skipped.length ? " | " + skipped.length + " ignorada(s)" : "") + ".";
-            if (skipped.length && total === 0) alert("Nada para extrair:\n\n" + skipped.join("\n"));
+            if (skipped.length && total === 0) uiAlert("Nada para extrair:\n\n" + skipped.join("\n"));
         };
     }
 
@@ -6751,11 +6784,11 @@
         function activeComp() {
             var comp = app.project ? app.project.activeItem : null;
             if (!isComp(comp)) {
-                alert("Abra uma composição e selecione as camadas.");
+                uiAlert("Abra uma composição e selecione as camadas.");
                 return null;
             }
             if (comp.selectedLayers.length === 0) {
-                alert("Selecione uma ou mais camadas.");
+                uiAlert("Selecione uma ou mais camadas.");
                 return null;
             }
             return comp;
@@ -6796,7 +6829,7 @@
             }
 
             if (n < 0) {
-                alert("Selecione 3 ou mais camadas para distribuir.");
+                uiAlert("Selecione 3 ou mais camadas para distribuir.");
                 return;
             }
 
@@ -6891,7 +6924,7 @@
 
             var layers = comp.selectedLayers;
             if (layers.length !== 1) {
-                alert("Selecione uma camada de áudio (só uma).");
+                uiAlert("Selecione uma camada de áudio (só uma).");
                 return;
             }
 
@@ -6899,7 +6932,7 @@
             var hasAudio = false;
             try { hasAudio = layer.hasAudio; } catch (eA) {}
             if (!hasAudio) {
-                alert("A camada \"" + layer.name + "\" não tem áudio.");
+                uiAlert("A camada \"" + layer.name + "\" não tem áudio.");
                 return;
             }
 
@@ -6924,7 +6957,7 @@
                 });
             } catch (e) {
                 status.text = "Não foi possível analisar.";
-                alert(e.toString().replace("Error: ", ""));
+                uiAlert(e.toString().replace("Error: ", ""));
                 return;
             } finally {
                 app.endUndoGroup();
@@ -7296,7 +7329,7 @@
         try { label = ctrl.text || ctrl.helpTip || ctrl.type; } catch (eL) {}
         try { app.endUndoGroup(); } catch (eU) {}
 
-        alert(
+        uiAlert(
             SCRIPT_NAME + " — algo deu errado em \"" + String(label).substring(0, 60) + "\":\n\n" +
             (e && e.message ? e.message : String(e)) +
             (e && e.line ? "\n(linha " + e.line + ")" : "")

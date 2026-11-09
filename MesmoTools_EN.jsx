@@ -22,7 +22,7 @@
 (function MesmoTools(thisObj) {
 
     var SCRIPT_NAME = "Mesmo Tools";
-    var SCRIPT_VERSION = "2.17";
+    var SCRIPT_VERSION = "2.18";
     var suppressResizeSync = false;
     var lockedRatio = 16 / 9;
 
@@ -224,6 +224,27 @@
             el.alignment = ["fill", el.alignment && el.alignment[1] ? el.alignment[1] : "center"];
         } catch (e) {}
         return el;
+    }
+
+    /*
+        Aviso do After, mas curto: listas longas são cortadas.
+        No After 27 (Windows), alert() pode cortar mensagens grandes no meio.
+    */
+    function uiAlert(msg) {
+        var text = String(msg);
+        var lines = text.split("\n");
+        var MAX_LINES = 14;
+
+        if (lines.length > MAX_LINES) {
+            var rest = lines.length - (MAX_LINES - 1);
+            lines = lines.slice(0, MAX_LINES - 1);
+            lines.push("… (+" + rest + ")");
+            text = lines.join("\n");
+        }
+
+        if (text.length > 900) text = text.substring(0, 880) + "…";
+
+        alert(text, SCRIPT_NAME);
     }
 
     function uiLabel(parent, text) {
@@ -1261,12 +1282,12 @@
             var comps = getSelectedComps();
 
             if (comps.length === 0) {
-                alert("Select at least one composition in the Project panel.");
+                uiAlert("Select at least one composition in the Project panel.");
                 return;
             }
 
             if (!cbResize.value && !cbFPS.value && !cbDuration.value && !cbRenderer.value) {
-                alert("Enable at least one option to apply.");
+                uiAlert("Enable at least one option to apply.");
                 return;
             }
 
@@ -1284,7 +1305,7 @@
                     newW < 4 || newH < 4 ||
                     newW > 30000 || newH > 30000
                 ) {
-                    alert("W and H must be whole numbers between 4 and 30000 px.");
+                    uiAlert("W and H must be whole numbers between 4 and 30000 px.");
                     return;
                 }
             }
@@ -1293,7 +1314,7 @@
                 try {
                     requestedFPS = getRequestedFPS();
                 } catch (fpsErr) {
-                    alert(fpsErr.toString().replace("Error: ", ""));
+                    uiAlert(fpsErr.toString().replace("Error: ", ""));
                     return;
                 }
             }
@@ -1388,7 +1409,7 @@
                 status.text =
                     success + " updated, " + errors.length + " with errors.";
 
-                alert(
+                uiAlert(
                     "Finished with some errors:\n\n" +
                     errors.join("\n")
                 );
@@ -1635,20 +1656,20 @@
 
         btnRun.onClick = function () {
             if (!app.project) {
-                alert("No project open.");
+                uiAlert("No project open.");
                 return;
             }
 
             var sel = app.project.selection;
 
             if (!sel || sel.length === 0) {
-                alert("Select at least one composition in the Project panel.");
+                uiAlert("Select at least one composition in the Project panel.");
                 return;
             }
 
             var num = parseInt(copyCount.text, 10);
             if (isNaN(num) || num < 1 || num > 999) {
-                alert("Copies must be a number between 1 and 999.");
+                uiAlert("Copies must be a number between 1 and 999.");
                 return;
             }
 
@@ -1658,7 +1679,7 @@
             }
 
             if (valid.length === 0) {
-                alert("The selection has no compositions.");
+                uiAlert("The selection has no compositions.");
                 return;
             }
 
@@ -2318,7 +2339,7 @@
         var comp = app.project ? app.project.activeItem : null;
 
         if (!isComp(comp)) {
-            alert("Open a composition and select one or more text layers.");
+            uiAlert("Open a composition and select one or more text layers.");
             return {pieces: 0, skipped: 0, failed: 0, keptOriginals: 0};
         }
 
@@ -2330,7 +2351,7 @@
         }
 
         if (textLayers.length === 0) {
-            alert("No text layer selected.");
+            uiAlert("No text layer selected.");
             return {pieces: 0, skipped: selected.length, failed: 0, keptOriginals: 0};
         }
 
@@ -2351,7 +2372,7 @@
 
                 if (unsupported) {
                     skipped++;
-                    alert("'" + layer.name + "' was skipped: " + unsupported);
+                    uiAlert("'" + layer.name + "' was skipped: " + unsupported);
                     continue;
                 }
 
@@ -2363,7 +2384,7 @@
                     );
                 } catch (segErr) {
                     skipped++;
-                    alert(
+                    uiAlert(
                         "Error in '" + layer.name + "':\n" +
                         segErr.toString().replace("Error: ", "")
                     );
@@ -2547,7 +2568,7 @@
                  mode === "custom regular expression") &&
                 txtCustom.text === ""
             ) {
-                alert(
+                uiAlert(
                     mode === "custom word"
                         ? "Type the word you want to isolate."
                         : "Type a regular expression."
@@ -2573,7 +2594,7 @@
                 ".";
 
             if (result.keptOriginals) {
-                alert(
+                uiAlert(
                     "Some pieces could not be created, so " +
                     result.keptOriginals +
                     " original layer(s) were kept so you don't lose the text."
@@ -2686,14 +2707,14 @@
 
         function processSelection(mode, enable) {
             if (!app.project) {
-                alert("No project open.");
+                uiAlert("No project open.");
                 return;
             }
 
             var comps = targetComps();
 
             if (comps.length === 0) {
-                alert("Select at least one composition in the Project panel (or open a comp).");
+                uiAlert("Select at least one composition in the Project panel (or open a comp).");
                 return;
             }
 
@@ -2846,7 +2867,7 @@
 
         } catch (e) {
             try { f.close(); } catch (closeErr) {}
-            alert(
+            uiAlert(
                 "Could not save favorites:\n" +
                 e.toString().replace("Error: ", "") + WRITE_HELP
             );
@@ -4218,13 +4239,13 @@
         function apply() {
             var e = current();
             if (!e) {
-                alert("Pick an expression from the list.");
+                uiAlert("Pick an expression from the list.");
                 return;
             }
 
             var comp = app.project ? app.project.activeItem : null;
             if (!isComp(comp)) {
-                alert("Open a composition.");
+                uiAlert("Open a composition.");
                 return;
             }
 
@@ -4238,7 +4259,7 @@
 
             if (res.applied === 0 && res.msg) {
                 status.text = res.msg;
-                alert(res.msg);
+                uiAlert(res.msg);
                 return;
             }
 
@@ -4254,7 +4275,7 @@
                     if (msg) msg += "\n\n";
                     msg += "Applied, but the expression has an error in:\n" + res.warnings.join("\n");
                 }
-                alert(msg);
+                uiAlert(msg);
             }
         }
 
@@ -4299,11 +4320,11 @@
             var code = txtCode.text;
 
             if (name === "") {
-                alert("Give the expression a name.");
+                uiAlert("Give the expression a name.");
                 return;
             }
             if (trimString(code) === "") {
-                alert("Paste the expression code.");
+                uiAlert("Paste the expression code.");
                 return;
             }
 
@@ -4334,7 +4355,7 @@
         btnDel.onClick = function () {
             var e = current();
             if (!e || !e.mine) {
-                alert("Pick one of your expressions (★ Mine) to delete. Mesmo shortcuts can't be deleted.");
+                uiAlert("Pick one of your expressions (★ Mine) to delete. Mesmo shortcuts can't be deleted.");
                 return;
             }
 
@@ -4511,7 +4532,7 @@
             return true;
         } catch (e) {
             try { f.close(); } catch (closeErr) {}
-            alert(
+            uiAlert(
                 "Could not save curves:\n" +
                 e.toString().replace("Error: ", "") + WRITE_HELP
             );
@@ -5587,7 +5608,7 @@
             var v = parseCurveValues(txtValues.text);
 
             if (!v) {
-                alert("Use 4 numbers: x1, y1, x2, y2 (e.g. 0.4, 0, 0.2, 1).");
+                uiAlert("Use 4 numbers: x1, y1, x2, y2 (e.g. 0.4, 0, 0.2, 1).");
                 syncEditorFields();
                 return;
             }
@@ -5611,7 +5632,7 @@
             var cat = trimString(txtCat.text) || "Mine";
 
             if (name === "") {
-                alert("Give the curve a name.");
+                uiAlert("Give the curve a name.");
                 return;
             }
 
@@ -5654,7 +5675,7 @@
         btnFav.onClick = function () {
             var idx = lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
             if (idx === -1) {
-                alert("Pick (or save) a library curve first.");
+                uiAlert("Pick (or save) a library curve first.");
                 return;
             }
 
@@ -5668,7 +5689,7 @@
         btnDelete.onClick = function () {
             var idx = lib.selected === null ? -1 : findCurveIndex(curves, lib.selected);
             if (idx === -1) {
-                alert("Pick a library curve to delete.");
+                uiAlert("Pick a library curve to delete.");
                 return;
             }
 
@@ -5697,7 +5718,7 @@
     function activeCompOrAlert() {
         var comp = app.project ? app.project.activeItem : null;
         if (!isComp(comp)) {
-            alert("Open a composition first.");
+            uiAlert("Open a composition first.");
             return null;
         }
         return comp;
@@ -6161,10 +6182,18 @@
         selectOnly(comp, [layer]);
         try { comp.openInViewer(); } catch (eV) {}
 
+        // O nome do comando muda com o idioma do After: tenta os mais comuns.
+        var MENU_NAMES = [
+            "Convert Audio to Keyframes",
+            "Converter áudio em quadros-chave",
+            "Convertir audio en fotogramas clave",
+            "Convertir l'audio en images clés",
+            "Audio in Keyframes konvertieren",
+            "Converti audio in fotogrammi chiave"
+        ];
         var cmd = 0;
-        try { cmd = app.findMenuCommandId("Convert Audio to Keyframes"); } catch (eC) {}
-        if (!cmd) {
-            try { cmd = app.findMenuCommandId("Converter áudio em quadros-chave"); } catch (eC2) {}
+        for (var mi = 0; mi < MENU_NAMES.length && !cmd; mi++) {
+            try { cmd = app.findMenuCommandId(MENU_NAMES[mi]); } catch (eC) { cmd = 0; }
         }
         if (!cmd) throw new Error("Couldn't find After Effects' \"Convert Audio to Keyframes\" command.");
 
@@ -6261,7 +6290,7 @@
 
             var layers = layersForNull(comp);
             if (layers.length === 0) {
-                alert("Select one or more layers.");
+                uiAlert("Select one or more layers.");
                 return;
             }
 
@@ -6271,7 +6300,7 @@
                 nul = createPositionNull(comp, layers);
                 selectOnly(comp, [nul]);
             } catch (e) {
-                alert("Could not create the null:\n" + e.toString().replace("Error: ", ""));
+                uiAlert("Could not create the null:\n" + e.toString().replace("Error: ", ""));
             } finally {
                 app.endUndoGroup();
             }
@@ -6359,7 +6388,7 @@
 
             var layers = comp.selectedLayers;
             if (layers.length === 0) {
-                alert("Select one or more layers.");
+                uiAlert("Select one or more layers.");
                 return;
             }
 
@@ -6426,7 +6455,7 @@
 
             var layers = comp.selectedLayers;
             if (layers.length === 0) {
-                alert("Select one or more shape layers.");
+                uiAlert("Select one or more shape layers.");
                 return;
             }
 
@@ -6457,7 +6486,7 @@
             }
 
             status.text = total + " layer(s) created" + (skipped.length ? " | " + skipped.length + " skipped" : "") + ".";
-            if (skipped.length && total === 0) alert("Nothing to extract:\n\n" + skipped.join("\n"));
+            if (skipped.length && total === 0) uiAlert("Nothing to extract:\n\n" + skipped.join("\n"));
         };
     }
 
@@ -6705,11 +6734,11 @@
         function activeComp() {
             var comp = app.project ? app.project.activeItem : null;
             if (!isComp(comp)) {
-                alert("Open a composition and select the layers.");
+                uiAlert("Open a composition and select the layers.");
                 return null;
             }
             if (comp.selectedLayers.length === 0) {
-                alert("Select one or more layers.");
+                uiAlert("Select one or more layers.");
                 return null;
             }
             return comp;
@@ -6750,7 +6779,7 @@
             }
 
             if (n < 0) {
-                alert("Select 3 or more layers to distribute.");
+                uiAlert("Select 3 or more layers to distribute.");
                 return;
             }
 
@@ -6845,7 +6874,7 @@
 
             var layers = comp.selectedLayers;
             if (layers.length !== 1) {
-                alert("Select one audio layer (just one).");
+                uiAlert("Select one audio layer (just one).");
                 return;
             }
 
@@ -6853,7 +6882,7 @@
             var hasAudio = false;
             try { hasAudio = layer.hasAudio; } catch (eA) {}
             if (!hasAudio) {
-                alert("The layer \"" + layer.name + "\" has no audio.");
+                uiAlert("The layer \"" + layer.name + "\" has no audio.");
                 return;
             }
 
@@ -6878,7 +6907,7 @@
                 });
             } catch (e) {
                 status.text = "Could not analyze.";
-                alert(e.toString().replace("Error: ", ""));
+                uiAlert(e.toString().replace("Error: ", ""));
                 return;
             } finally {
                 app.endUndoGroup();
@@ -7250,7 +7279,7 @@
         try { label = ctrl.text || ctrl.helpTip || ctrl.type; } catch (eL) {}
         try { app.endUndoGroup(); } catch (eU) {}
 
-        alert(
+        uiAlert(
             SCRIPT_NAME + " — something went wrong in \"" + String(label).substring(0, 60) + "\":\n\n" +
             (e && e.message ? e.message : String(e)) +
             (e && e.line ? "\n(line " + e.line + ")" : "")

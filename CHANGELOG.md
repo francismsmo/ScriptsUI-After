@@ -1,7 +1,17 @@
 # Mesmo Tools — histórico de versões
 
-A versão aparece no canto do cabeçalho do painel (ex.: `v2.17`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
+A versão aparece no canto do cabeçalho do painel (ex.: `v2.18`). Cada alteração sobe o número: 2.13 → 2.14 → 2.15...
 A versão em inglês (`MesmoTools_EN.jsx`) tem sempre o mesmo número da portuguesa.
+
+## v2.18 — 09/11/2026
+- **After Effects 27.0 (2027):** revisado para a versão nova. A Adobe não mudou nada no ExtendScript/ScriptUI que o painel usa, então tudo continua igual. Dois ajustes de segurança:
+  - avisos longos (listas de erros) agora são encurtados, porque no After 27 para Windows o `alert()` pode cortar mensagens grandes no meio;
+  - **Batidas** acha o comando *Convert Audio to Keyframes* também com o After em espanhol, francês, alemão e italiano.
+- **Instalador** (pasta `instalador/`):
+  - `Instalar Mesmo Tools.jsx`: rode dentro do After (*File > Scripts > Run Script File*). Instala na versão aberta, escolhe o idioma, liga a permissão de gravar arquivos e, se a pasta do programa estiver bloqueada, instala na pasta de scripts do usuário.
+  - `Instalar Mesmo Tools - Windows.bat` e `Instalar Mesmo Tools - Mac.command`: dois cliques, instala em todas as versões do After encontradas (pede administrador/senha).
+  - Os dois apagam o `CompManager_Mesmo.jsx` antigo.
+- `tools/build_release.py` gera o zip pronto para distribuir (painel PT e EN + instaladores + LEIA-ME).
 
 ## v2.17 — 28/10/2026
 - **Align** (Camadas, embaixo do Anchor Point), igual ao painel Align do After:
